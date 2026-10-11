@@ -29,12 +29,14 @@
 | 2026-10-11 | `./gradlew test` (native PostgreSQL 16, `Product` entity present) | **1 passed** — `contextLoads` |
 | 2026-10-11 | `docker compose up -d` | `postgres:18` container reached `healthy`; published on `127.0.0.1:5433` |
 | 2026-10-11 | `./gradlew test` against the Compose container | **1 passed** — `contextLoads`; `products` table created with `numeric(12,2)` price and unique `sku` |
+| 2026-10-11 | `./gradlew test --tests CommerceFlowApplicationTests` with Compose DB stopped | **1 passed** against a Testcontainers `postgres:18` (random port) |
 
 ## Architectural decisions
 
 - Modular monolith first, package-by-feature (`com.commerceflow.product`); ADR to be written in Stage 5.
 - Base package `com.commerceflow` (Initializr generated `com.commerceflow.commerceflow`).
 - Lombok removed: DTOs will be records; the entity is written by hand.
+- Tests get their own throwaway PostgreSQL via Testcontainers (`@ServiceConnection`), never the dev database; Testcontainers 2.0.5 versions come from the Boot BOM.
 - Spring Boot 4 modular test starters (`spring-boot-starter-webmvc-test`, etc.) kept instead of declaring `spring-boot-starter-test` directly.
 
 ## Concepts covered
