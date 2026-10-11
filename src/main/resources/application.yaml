@@ -1,3 +1,20 @@
 spring:
   application:
     name: commerceflow
+  datasource:
+    # Defaults match compose.yaml (development only). Override with environment variables elsewhere.
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/commerceflow}
+    username: ${DB_USERNAME:commerceflow}
+    password: ${DB_PASSWORD:commerceflow_dev_only}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Temporary: replaced by Flyway migrations + "validate" before Milestone 1 is complete.
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug

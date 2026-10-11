@@ -1,0 +1,24 @@
+# Local development database only.
+# The credentials below are DEVELOPMENT-ONLY defaults. Never reuse them outside your machine.
+services:
+  postgres:
+    image: postgres:18
+    container_name: commerceflow-postgres
+    environment:
+      POSTGRES_DB: commerceflow
+      POSTGRES_USER: commerceflow
+      POSTGRES_PASSWORD: commerceflow_dev_only
+    ports:
+      # Host port 5433: this machine already runs a native PostgreSQL on 5432.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      # PostgreSQL 18+ images keep data under /var/lib/postgresql/<major>/docker.
+      - commerceflow-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U commerceflow -d commerceflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  commerceflow-pgdata:

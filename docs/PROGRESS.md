@@ -6,9 +6,9 @@
 
 | Stage | Scope | Status |
 |---|---|---|
-| 0 | Baseline cleanup: package, Lombok removal, tracker | Done (commits pending — git identity not configured) |
-| 1 | PostgreSQL via Docker Compose + datasource configuration | Blocked: Docker not available in WSL |
-| 2 | `Product` entity, repository, Testcontainers constraint tests | Not started |
+| 0 | Baseline cleanup: package, Lombok removal, tracker | Done (committed) |
+| 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
+| 2 | `Product` entity, repository, Testcontainers constraint tests | Entity + repository done and committed; Testcontainers tests next |
 | 3 | Service + create/get/list endpoints, unit tests | Not started |
 | 4 | Centralized error handling, API and integration tests | Not started |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
@@ -26,8 +26,9 @@
 | 2026-10-11 | `./gradlew clean compileJava compileTestJava` | BUILD SUCCESSFUL |
 | 2026-10-11 | `./gradlew dependencies --configuration testRuntimeClasspath` | `spring-boot-starter-test:4.1.1` present transitively |
 | 2026-10-11 | `./gradlew test` | **1 failed** — `contextLoads`: `Failed to determine a suitable driver class` (expected: no datasource configured yet; fixed in Stage 1/2) |
-
-No tests have passed yet.
+| 2026-10-11 | `./gradlew test` (native PostgreSQL 16, `Product` entity present) | **1 passed** — `contextLoads` |
+| 2026-10-11 | `docker compose up -d` | `postgres:18` container reached `healthy`; published on `127.0.0.1:5433` |
+| 2026-10-11 | `./gradlew test` against the Compose container | **1 passed** — `contextLoads`; `products` table created with `numeric(12,2)` price and unique `sku` |
 
 ## Architectural decisions
 
@@ -40,13 +41,18 @@ No tests have passed yet.
 
 - Spring Boot auto-configuration fails fast: JPA on the classpath requires a `DataSource`, and with no URL and no embedded database there is no driver to choose.
 
+- Hibernate needs a no-arg constructor because it instantiates by reflection and then populates fields; `protected` so generated proxy subclasses can call it.
+- `Instant.now()` has finer precision than `timestamptz` (microseconds), so `createdAt` is truncated before persisting.
+- Repository implementations come from Spring Data JPA (a proxy over `SimpleJpaRepository`), not from Hibernate.
+
 ## Known issues
 
-- Docker is not reachable from this WSL distro (enable Docker Desktop → Settings → Resources → WSL Integration).
-- Git `user.name` / `user.email` are not set, so nothing is committed yet. The untouched Initializr output is staged in the index; Stage 0 changes are unstaged.
+- A native PostgreSQL 16 listens on `127.0.0.1:5432`, so `compose.yaml` publishes the container on host port **5433**.
+- Hibernate named the SKU unique constraint automatically (`ukfhmd06...`); Flyway in Stage 5 gives it a stable name.
+- `ddl-auto: update` never drops anything; the old `product` table from before `@Table` may still exist in the native database.
+- Only `contextLoads` exists so far; no repository or constraint tests yet.
 
 ## Next task
 
-1. Set git identity and make the two Stage 0 commits.
-2. Enable Docker in WSL; confirm `docker compose version`.
-3. Stage 1: `compose.yaml` + datasource configuration.
+1. Stage 2: add Testcontainers and the repository constraint tests (round-trip, duplicate SKU, null SKU, null price).
+2. Stage 3: DTO records and `ProductService` with Mockito unit tests.
