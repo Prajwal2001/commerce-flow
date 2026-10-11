@@ -9,7 +9,7 @@
 | 0 | Baseline cleanup: package, Lombok removal, tracker | Done (committed) |
 | 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
-| 3 | Service + create/get/list endpoints, unit tests | Not started |
+| 3 | Service + create/get/list endpoints, unit tests | DTOs, exceptions, `ProductService` and `ProductServiceTest` done; controller not started |
 | 4 | Centralized error handling, API and integration tests | Not started |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
 
@@ -31,6 +31,7 @@
 | 2026-10-11 | `./gradlew test` against the Compose container | **1 passed** — `contextLoads`; `products` table created with `numeric(12,2)` price and unique `sku` |
 | 2026-10-11 | `./gradlew test --tests CommerceFlowApplicationTests` with Compose DB stopped | **1 passed** against a Testcontainers `postgres:18` (random port) |
 | 2026-10-11 | `./gradlew test` | **7 passed**: `contextLoads` + 6 `ProductRepositoryTest` (round trip via flush/clear, optional description, `findBySku`, duplicate SKU, null SKU, null price) |
+| 2026-10-12 | `./gradlew test` | **11 passed**: `contextLoads` + 6 `ProductRepositoryTest` + 4 `ProductServiceTest` |
 
 ## Architectural decisions
 
@@ -51,14 +52,17 @@
 - `findById` right after `save` returns the cached instance without SQL; a real round-trip test must `flush()` and `clear()` first.
 - `@DataJpaTest` loads only the JPA slice and rolls back per test; `@SpringBootTest` loads everything and is for end-to-end tests.
 - `numeric(12,2)` returns scale 2, so compare prices with `isEqualByComparingTo`.
+- Mockito service tests prove service logic only; with a mocked repository the entity id stays null, so ID generation and constraints are covered by the Testcontainers repository tests.
+- A uniqueness pre-check (`findBySku` then insert) races under concurrency; the database constraint is the guarantee and the service translates its violation.
 
 ## Known issues
 
 - A native PostgreSQL 16 listens on `127.0.0.1:5432`, so `compose.yaml` publishes the container on host port **5433**.
+- The service reports any integrity violation as a duplicate SKU; Stage 5 names the constraint so it can be matched precisely.
 - Hibernate named the SKU unique constraint automatically (`ukfhmd06...`); Flyway in Stage 5 gives it a stable name.
 - `ddl-auto: update` never drops anything; the old `product` table from before `@Table` may still exist in the native database.
 
 ## Next task
 
-1. Stage 3: DTO records (`CreateProductRequest`, `ProductResponse`) and `ProductService` with Mockito unit tests.
-2. Then `ProductController` and the create/get/list endpoints.
+1. Tighten `ProductServiceTest` (assign id in the mock, assert the duplicate message does not leak SQL, assert list mapping), then commit.
+2. Stage 4: `ProductController`, `ApiExceptionHandler` (RFC 9457 `ProblemDetail`), `@WebMvcTest` and end-to-end API tests.
