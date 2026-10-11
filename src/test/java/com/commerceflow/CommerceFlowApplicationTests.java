@@ -1,10 +1,10 @@
-package com.commerceflow.commerceflow;
+package com.commerceflow;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class CommerceflowApplicationTests {
+class CommerceFlowApplicationTests {
 
 	@Test
 	void contextLoads() {
