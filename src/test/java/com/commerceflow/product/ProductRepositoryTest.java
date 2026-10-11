@@ -1,18 +1,16 @@
 package com.commerceflow.product;
 
-import org.assertj.core.api.Assertions;
+import com.commerceflow.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.util.UUID;
-
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
-import org.springframework.context.annotation.Import;
-import com.commerceflow.TestcontainersConfiguration;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,49 +23,75 @@ class ProductRepositoryTest {
     @Autowired
     private ProductRepository productRepository;
 
+    @Autowired
+    private TestEntityManager entityManager;
+
     @Test
-    void saveProductAndFetch() {
-        Product product = new Product("sku1", "name1", "desc1", BigDecimal.valueOf(100));
-        Product savedProduct = productRepository.save(product);
+    void savedProductIsReadBackFromDatabase() {
+        Product product = new Product("sku1", "name1", "desc1", new BigDecimal("79.9"));
+        Product saved = productRepository.save(product);
+        UUID id = saved.getId();
+        assertThat(id).isNotNull();
 
-        assertThat(savedProduct.getId()).isNotNull();
+        // Send the INSERT, then empty the persistence context so findById has to run a SELECT
+        // instead of returning the object we just saved.
+        entityManager.flush();
+        entityManager.clear();
 
-        UUID id = savedProduct.getId();
+        Product loaded = productRepository.findById(id).orElseThrow();
 
-        Product loadedProduct = productRepository.findById(id).orElseThrow();
-
-        assertThat(loadedProduct).isNotNull();
-        assertThat(loadedProduct.getId()).isEqualTo(id);
-        assertThat(loadedProduct.getSku()).isEqualTo("sku1");
-        assertThat(loadedProduct.getName()).isEqualTo("name1");
-        assertThat(loadedProduct.getDescription()).isEqualTo("desc1");
-
+        assertThat(loaded).isNotSameAs(saved);
+        assertThat(loaded.getId()).isEqualTo(id);
+        assertThat(loaded.getSku()).isEqualTo("sku1");
+        assertThat(loaded.getName()).isEqualTo("name1");
+        assertThat(loaded.getDescription()).isEqualTo("desc1");
+        // numeric(12,2) returns scale 2, so 79.9 comes back as 79.90; compare by value, not by scale.
+        assertThat(loaded.getPrice()).isEqualByComparingTo("79.90");
+        assertThat(loaded.getPrice().scale()).isEqualTo(2);
+        // Equal only because the constructor truncates to the microsecond precision of timestamptz.
+        assertThat(loaded.getCreatedAt()).isEqualTo(saved.getCreatedAt());
     }
 
     @Test
-    void fetchBySku() {
-        Product product = new Product("sku1", "name1", "desc1", BigDecimal.valueOf(100));
-        productRepository.save(product);
+    void descriptionIsOptional() {
+        Product saved = productRepository.save(new Product("sku1", "name1", null, BigDecimal.TEN));
+        entityManager.flush();
+        entityManager.clear();
 
-        Product loadedProduct = productRepository.findBySku("sku1").orElseThrow();
-
-        assertThat(loadedProduct).isNotNull();
-
-        loadedProduct = productRepository.findBySku("sku2").orElse(null);
-
-        assertThat(loadedProduct).isNull();
+        assertThat(productRepository.findById(saved.getId()).orElseThrow().getDescription()).isNull();
     }
 
     @Test
-    void saveDuplicateSku() {
-        Product product = new Product("sku1", "name1", "desc1", BigDecimal.valueOf(100));
-        Product savedProduct = productRepository.save(product);
+    void findBySkuReturnsMatchingProductOrEmpty() {
+        productRepository.save(new Product("sku1", "name1", "desc1", BigDecimal.valueOf(100)));
 
-        assertThat(savedProduct).isNotNull();
+        assertThat(productRepository.findBySku("sku1")).isPresent();
+        assertThat(productRepository.findBySku("sku2")).isEmpty();
+    }
 
-        Product product1 = new Product("sku1", "name1", "desc1", BigDecimal.valueOf(100));
-        assertThatThrownBy(() -> productRepository.saveAndFlush(product1))
+    @Test
+    void duplicateSkuViolatesUniqueConstraint() {
+        productRepository.saveAndFlush(new Product("sku1", "name1", "desc1", BigDecimal.valueOf(100)));
+
+        Product duplicate = new Product("sku1", "other name", "other desc", BigDecimal.valueOf(200));
+
+        assertThatThrownBy(() -> productRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void nullSkuIsRejectedByDatabase() {
+        Product product = new Product(null, "name1", "desc1", BigDecimal.TEN);
+
+        assertThatThrownBy(() -> productRepository.saveAndFlush(product))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void nullPriceIsRejectedByDatabase() {
+        Product product = new Product("sku1", "name1", "desc1", null);
+
+        assertThatThrownBy(() -> productRepository.saveAndFlush(product))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
 }

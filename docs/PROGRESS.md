@@ -8,7 +8,7 @@
 |---|---|---|
 | 0 | Baseline cleanup: package, Lombok removal, tracker | Done (committed) |
 | 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
-| 2 | `Product` entity, repository, Testcontainers constraint tests | Entity + repository done and committed; Testcontainers tests next |
+| 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
 | 3 | Service + create/get/list endpoints, unit tests | Not started |
 | 4 | Centralized error handling, API and integration tests | Not started |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
@@ -30,6 +30,7 @@
 | 2026-10-11 | `docker compose up -d` | `postgres:18` container reached `healthy`; published on `127.0.0.1:5433` |
 | 2026-10-11 | `./gradlew test` against the Compose container | **1 passed** — `contextLoads`; `products` table created with `numeric(12,2)` price and unique `sku` |
 | 2026-10-11 | `./gradlew test --tests CommerceFlowApplicationTests` with Compose DB stopped | **1 passed** against a Testcontainers `postgres:18` (random port) |
+| 2026-10-11 | `./gradlew test` | **7 passed**: `contextLoads` + 6 `ProductRepositoryTest` (round trip via flush/clear, optional description, `findBySku`, duplicate SKU, null SKU, null price) |
 
 ## Architectural decisions
 
@@ -46,15 +47,18 @@
 - Hibernate needs a no-arg constructor because it instantiates by reflection and then populates fields; `protected` so generated proxy subclasses can call it.
 - `Instant.now()` has finer precision than `timestamptz` (microseconds), so `createdAt` is truncated before persisting.
 - Repository implementations come from Spring Data JPA (a proxy over `SimpleJpaRepository`), not from Hibernate.
+- `save()` calls `persist` when `id == null` and `merge` otherwise, so saving the same managed instance twice is a no-op, not a second row. INSERTs run at flush, which is why constraint tests need `saveAndFlush`.
+- `findById` right after `save` returns the cached instance without SQL; a real round-trip test must `flush()` and `clear()` first.
+- `@DataJpaTest` loads only the JPA slice and rolls back per test; `@SpringBootTest` loads everything and is for end-to-end tests.
+- `numeric(12,2)` returns scale 2, so compare prices with `isEqualByComparingTo`.
 
 ## Known issues
 
 - A native PostgreSQL 16 listens on `127.0.0.1:5432`, so `compose.yaml` publishes the container on host port **5433**.
 - Hibernate named the SKU unique constraint automatically (`ukfhmd06...`); Flyway in Stage 5 gives it a stable name.
 - `ddl-auto: update` never drops anything; the old `product` table from before `@Table` may still exist in the native database.
-- Only `contextLoads` exists so far; no repository or constraint tests yet.
 
 ## Next task
 
-1. Stage 2: add Testcontainers and the repository constraint tests (round-trip, duplicate SKU, null SKU, null price).
-2. Stage 3: DTO records and `ProductService` with Mockito unit tests.
+1. Stage 3: DTO records (`CreateProductRequest`, `ProductResponse`) and `ProductService` with Mockito unit tests.
+2. Then `ProductController` and the create/get/list endpoints.
