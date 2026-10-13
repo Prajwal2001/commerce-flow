@@ -9,8 +9,8 @@
 | 0 | Baseline cleanup: package, Lombok removal, tracker | Done (committed) |
 | 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
-| 3 | Service + create/get/list endpoints, unit tests | DTOs, exceptions, `ProductService` and `ProductServiceTest` done; controller not started |
-| 4 | Centralized error handling, API and integration tests | Not started |
+| 3 | Service + create/get/list endpoints, unit tests | Done: DTOs, exceptions, `ProductService`, `ProductController`, `ProductServiceTest` |
+| 4 | Centralized error handling, API and integration tests | In progress: error handlers + `ProductControllerTest` done; end-to-end, concurrency and restart tests pending |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
 
 ## Stack (verified on this machine)
@@ -32,6 +32,7 @@
 | 2026-10-11 | `./gradlew test --tests CommerceFlowApplicationTests` with Compose DB stopped | **1 passed** against a Testcontainers `postgres:18` (random port) |
 | 2026-10-11 | `./gradlew test` | **7 passed**: `contextLoads` + 6 `ProductRepositoryTest` (round trip via flush/clear, optional description, `findBySku`, duplicate SKU, null SKU, null price) |
 | 2026-10-12 | `./gradlew test` | **11 passed**: `contextLoads` + 6 `ProductRepositoryTest` + 4 `ProductServiceTest` |
+| 2026-10-13 | `./gradlew test --rerun` | **19 passed**: `contextLoads` + 8 `ProductControllerTest` + 6 `ProductRepositoryTest` + 4 `ProductServiceTest` |
 
 ## Architectural decisions
 
@@ -39,6 +40,7 @@
 - Base package `com.commerceflow` (Initializr generated `com.commerceflow.commerceflow`).
 - Lombok removed: DTOs will be records; the entity is written by hand.
 - Tests get their own throwaway PostgreSQL via Testcontainers (`@ServiceConnection`), never the dev database; Testcontainers 2.0.5 versions come from the Boot BOM.
+- Error mapping is split: `common/ApiExceptionHandler` (generic, extends `ResponseEntityExceptionHandler`, RFC 9457 `ProblemDetail`) knows no business package; each module maps its own exceptions (`product/ProductExceptionHandler`).
 - Spring Boot 4 modular test starters (`spring-boot-starter-webmvc-test`, etc.) kept instead of declaring `spring-boot-starter-test` directly.
 
 ## Concepts covered
@@ -54,6 +56,8 @@
 - `numeric(12,2)` returns scale 2, so compare prices with `isEqualByComparingTo`.
 - Mockito service tests prove service logic only; with a mocked repository the entity id stays null, so ID generation and constraints are covered by the Testcontainers repository tests.
 - A uniqueness pre-check (`findBySku` then insert) races under concurrency; the database constraint is the guarantee and the service translates its violation.
+- `@WebMvcTest` loads only the MVC slice with the service mocked; it proves the HTTP contract (status codes, headers, error body), not database behaviour.
+- A Gradle `test` task that is up to date reports a pass without executing; use `--rerun` when the result must be fresh.
 
 ## Known issues
 
@@ -64,5 +68,5 @@
 
 ## Next task
 
-1. Tighten `ProductServiceTest` (assign id in the mock, assert the duplicate message does not leak SQL, assert list mapping), then commit.
-2. Stage 4: `ProductController`, `ApiExceptionHandler` (RFC 9457 `ProblemDetail`), `@WebMvcTest` and end-to-end API tests.
+1. Stage 4: `ProductApiIntegrationTest` (`@SpringBootTest` + Testcontainers): full HTTP flow, 409 through the real constraint, concurrent duplicate SKU.
+2. Persistence-across-restart test and a manual `curl` run against `bootRun`.
