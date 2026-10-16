@@ -10,7 +10,7 @@
 | 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
 | 3 | Service + create/get/list endpoints, unit tests | Done: DTOs, exceptions, `ProductService`, `ProductController`, `ProductServiceTest` |
-| 4 | Centralized error handling, API and integration tests | In progress: error handlers + `ProductControllerTest` done; end-to-end, concurrency and restart tests pending |
+| 4 | Centralized error handling, API and integration tests | In progress: handlers, `ProductControllerTest` and 5 end-to-end tests done; concurrency and restart tests pending |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
 
 ## Stack (verified on this machine)
@@ -33,6 +33,8 @@
 | 2026-10-11 | `./gradlew test` | **7 passed**: `contextLoads` + 6 `ProductRepositoryTest` (round trip via flush/clear, optional description, `findBySku`, duplicate SKU, null SKU, null price) |
 | 2026-10-12 | `./gradlew test` | **11 passed**: `contextLoads` + 6 `ProductRepositoryTest` + 4 `ProductServiceTest` |
 | 2026-10-13 | `./gradlew test --rerun` | **19 passed**: `contextLoads` + 8 `ProductControllerTest` + 6 `ProductRepositoryTest` + 4 `ProductServiceTest` |
+| 2026-10-16 | `./gradlew test --rerun` | **24 passed**: + 5 `ProductApiIntegrationTest` (create/fetch via Location, duplicate SKU 409 from the real constraint, 404, 400 listing fields, non-numeric price 400) |
+| 2026-10-16 | Mutation check: `saveAndFlush` -> `save` in `ProductService.create` | `duplicateSku...` e2e test **failed** (expected 409, was 500); change reverted |
 
 ## Architectural decisions
 
@@ -58,6 +60,8 @@
 - A uniqueness pre-check (`findBySku` then insert) races under concurrency; the database constraint is the guarantee and the service translates its violation.
 - `@WebMvcTest` loads only the MVC slice with the service mocked; it proves the HTTP contract (status codes, headers, error body), not database behaviour.
 - A Gradle `test` task that is up to date reports a pass without executing; use `--rerun` when the result must be fresh.
+- `save` defers the INSERT to commit, which runs after the service method returns, so the `catch` never sees the constraint violation and the client gets a 500. `saveAndFlush` forces the INSERT inside the `try`.
+- `@SpringBootTest` does not roll back between tests, so end-to-end tests need unique data per test (unique SKUs).
 
 ## Known issues
 
@@ -68,5 +72,6 @@
 
 ## Next task
 
-1. Stage 4: `ProductApiIntegrationTest` (`@SpringBootTest` + Testcontainers): full HTTP flow, 409 through the real constraint, concurrent duplicate SKU.
+1. Stage 4: concurrent duplicate-SKU test (N parallel POSTs, exactly one 201, the rest 409).
 2. Persistence-across-restart test and a manual `curl` run against `bootRun`.
+3. Stage 5: Flyway, README, ADR-0001.
