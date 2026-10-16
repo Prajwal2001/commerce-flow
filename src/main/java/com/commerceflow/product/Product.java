@@ -3,6 +3,7 @@ package com.commerceflow.product;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
@@ -36,7 +37,7 @@ public class Product {
         this.sku = sku;
         this.name = name;
         this.description = description;
-        this.price = price;
+        this.price = normalize(price);
         this.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
@@ -62,5 +63,14 @@ public class Product {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    /**
+     * Prices are stored as numeric(12,2). Normalizing to scale 2 up front means the object we return
+     * after saving matches what a later read returns. UNNECESSARY makes a value with more than two
+     * decimals fail loudly instead of being silently rounded; request validation rejects those earlier.
+     */
+    private static BigDecimal normalize(BigDecimal price) {
+        return price == null ? null : price.setScale(2, RoundingMode.UNNECESSARY);
     }
 }

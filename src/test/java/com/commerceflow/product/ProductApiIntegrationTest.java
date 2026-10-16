@@ -183,4 +183,26 @@ class ProductApiIntegrationTest {
                 .expectBody(new ParameterizedTypeReference<List<ProductResponse>>() {})
                 .value(products -> assertThat(products).filteredOn(product -> sku.equals(product.sku())).hasSize(1));
     }
+
+    @Test
+    void priceIsReturnedWithTwoDecimalPlacesByCreateAndGetAlike() {
+        // 79.9 has scale 1; the database column is numeric(12,2). Both endpoints must agree.
+        ProductResponse created = client.post().uri("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CreateProductRequest(uniqueSku(), "Keyboard", null, new BigDecimal("79.9")))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(ProductResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(created).isNotNull();
+        assertThat(created.price().scale()).isEqualTo(2);
+
+        client.get().uri("/api/v1/products/{id}", created.id())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(ProductResponse.class)
+                .value(fetched -> assertThat(fetched.price()).isEqualTo(created.price()));
+    }
 }

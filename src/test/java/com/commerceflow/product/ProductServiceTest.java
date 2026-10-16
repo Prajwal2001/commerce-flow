@@ -42,7 +42,7 @@ class ProductServiceTest {
         assertThat(productResponse.sku()).isEqualTo("sku1");
         assertThat(productResponse.name()).isEqualTo("name1");
         assertThat(productResponse.description()).isEqualTo("desc1");
-        assertThat(productResponse.price()).isEqualTo(BigDecimal.ONE);
+        assertThat(productResponse.price()).isEqualTo(new BigDecimal("1.00"));
         assertThat(productResponse.createdAt()).isNotNull();
     }
 

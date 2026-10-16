@@ -10,7 +10,7 @@
 | 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
 | 3 | Service + create/get/list endpoints, unit tests | Done: DTOs, exceptions, `ProductService`, `ProductController`, `ProductServiceTest` |
-| 4 | Centralized error handling, API and integration tests | In progress: handlers, `ProductControllerTest`, 6 end-to-end tests incl. concurrency done; restart test and manual `curl` run pending |
+| 4 | Centralized error handling, API and integration tests | Done: handlers, 8 controller tests, 7 end-to-end tests incl. concurrency; manual `bootRun` + `curl` and restart check performed |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
 
 ## Stack (verified on this machine)
@@ -37,6 +37,9 @@
 | 2026-10-16 | Mutation check: `saveAndFlush` -> `save` in `ProductService.create` | `duplicateSku...` e2e test **failed** (expected 409, was 500); change reverted |
 | 2026-10-16 | `./gradlew test --rerun` | **25 passed**: + `concurrentCreatesWithTheSameSkuYieldExactlyOneProduct` (10 parallel POSTs, same SKU: one 201, nine 409, one row); stable over 3 runs |
 | 2026-10-16 | Mutation check: check-then-insert (`findBySku` pre-check) instead of relying on the constraint | concurrency test **failed 3/3**: nine requests returned 500, one 201, no 409; change reverted |
+| 2026-10-16 | Manual: `docker compose up -d`, `./gradlew bootRun` (started in ~4 s), `curl` | 201 + `Location`; 409 duplicate; 400 invalid body, malformed JSON and bad UUID; 404 unknown id; 200 list |
+| 2026-10-16 | Manual restart: stop app, `docker compose restart postgres`, `bootRun` again, `GET` earlier product | Same id, fields and `createdAt` returned: data persisted across restart of both app and database |
+| 2026-10-16 | `./gradlew test --rerun` after price normalization | **26 passed** (added `priceIsReturnedWithTwoDecimalPlacesByCreateAndGetAlike`; it failed first with `expected: 2 but was: 1`) |
 
 ## Architectural decisions
 
@@ -66,6 +69,8 @@
 - `@SpringBootTest` does not roll back between tests, so end-to-end tests need unique data per test (unique SKUs).
 - Check-then-insert is racy: concurrent requests all pass the pre-check, then the unique constraint rejects the losers after the pre-check, outside any translation, so clients saw 500 (observed 9 of 10 requests). The constraint is the guarantee; the pre-check only adds a race.
 - JsonPath `.length()` after a filter measures the matched object, not the match count; count in Java instead.
+- A manual run found POST returned `79.9` while GET returned `79.90`: the response echoed the in-memory `BigDecimal` but reads return the `numeric(12,2)` value. `Product` now normalizes price to scale 2 (`RoundingMode.UNNECESSARY`, so excess decimals fail loudly instead of being rounded; request validation rejects them earlier).
+- `pkill -f <pattern>` run from a shell whose own command line contains the pattern kills that shell; use a bracket pattern such as `Foo[A]pp`.
 
 ## Known issues
 
@@ -76,5 +81,4 @@
 
 ## Next task
 
-1. Stage 4: persistence-across-restart test and a manual `curl` run against `bootRun`.
-2. Stage 5: Flyway migration (named constraints), `ddl-auto: validate`, README, ADR-0001.
+Stage 5: Flyway migration `V1__create_products.sql` with named constraints (`uq_products_sku`, `ck_products_price_positive`), `ddl-auto: validate`, match the constraint name in duplicate detection, README with setup and `curl` examples, ADR-0001.
