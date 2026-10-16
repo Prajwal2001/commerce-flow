@@ -10,7 +10,7 @@
 | 1 | PostgreSQL via Docker Compose + datasource configuration | Done: container healthy, app connects on host port 5433 |
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
 | 3 | Service + create/get/list endpoints, unit tests | Done: DTOs, exceptions, `ProductService`, `ProductController`, `ProductServiceTest` |
-| 4 | Centralized error handling, API and integration tests | In progress: handlers, `ProductControllerTest` and 5 end-to-end tests done; concurrency and restart tests pending |
+| 4 | Centralized error handling, API and integration tests | In progress: handlers, `ProductControllerTest`, 6 end-to-end tests incl. concurrency done; restart test and manual `curl` run pending |
 | 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
 
 ## Stack (verified on this machine)
@@ -35,6 +35,8 @@
 | 2026-10-13 | `./gradlew test --rerun` | **19 passed**: `contextLoads` + 8 `ProductControllerTest` + 6 `ProductRepositoryTest` + 4 `ProductServiceTest` |
 | 2026-10-16 | `./gradlew test --rerun` | **24 passed**: + 5 `ProductApiIntegrationTest` (create/fetch via Location, duplicate SKU 409 from the real constraint, 404, 400 listing fields, non-numeric price 400) |
 | 2026-10-16 | Mutation check: `saveAndFlush` -> `save` in `ProductService.create` | `duplicateSku...` e2e test **failed** (expected 409, was 500); change reverted |
+| 2026-10-16 | `./gradlew test --rerun` | **25 passed**: + `concurrentCreatesWithTheSameSkuYieldExactlyOneProduct` (10 parallel POSTs, same SKU: one 201, nine 409, one row); stable over 3 runs |
+| 2026-10-16 | Mutation check: check-then-insert (`findBySku` pre-check) instead of relying on the constraint | concurrency test **failed 3/3**: nine requests returned 500, one 201, no 409; change reverted |
 
 ## Architectural decisions
 
@@ -62,6 +64,8 @@
 - A Gradle `test` task that is up to date reports a pass without executing; use `--rerun` when the result must be fresh.
 - `save` defers the INSERT to commit, which runs after the service method returns, so the `catch` never sees the constraint violation and the client gets a 500. `saveAndFlush` forces the INSERT inside the `try`.
 - `@SpringBootTest` does not roll back between tests, so end-to-end tests need unique data per test (unique SKUs).
+- Check-then-insert is racy: concurrent requests all pass the pre-check, then the unique constraint rejects the losers after the pre-check, outside any translation, so clients saw 500 (observed 9 of 10 requests). The constraint is the guarantee; the pre-check only adds a race.
+- JsonPath `.length()` after a filter measures the matched object, not the match count; count in Java instead.
 
 ## Known issues
 
@@ -72,6 +76,5 @@
 
 ## Next task
 
-1. Stage 4: concurrent duplicate-SKU test (N parallel POSTs, exactly one 201, the rest 409).
-2. Persistence-across-restart test and a manual `curl` run against `bootRun`.
-3. Stage 5: Flyway, README, ADR-0001.
+1. Stage 4: persistence-across-restart test and a manual `curl` run against `bootRun`.
+2. Stage 5: Flyway migration (named constraints), `ddl-auto: validate`, README, ADR-0001.

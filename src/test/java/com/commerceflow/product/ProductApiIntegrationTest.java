@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -12,7 +13,14 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.springframework.test.web.servlet.client.StatusAssertions;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -128,5 +136,51 @@ class ProductApiIntegrationTest {
                 .body(body)
                 .exchange()
                 .expectStatus().isBadRequest();
+    }
+
+    @Test
+    void concurrentCreatesWithTheSameSkuYieldExactlyOneProduct() throws Exception {
+        int attempts = 10;
+        String sku = uniqueSku();
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        CountDownLatch allReady = new CountDownLatch(attempts);
+        CountDownLatch startGun = new CountDownLatch(1);
+
+        try {
+            List<Future<Integer>> responses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                responses.add(pool.submit(() -> {
+                    allReady.countDown();
+                    startGun.await();   // every thread waits here so the requests really overlap
+                    return client.post().uri("/api/v1/products")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(request(sku))
+                            .exchange()
+                            .returnResult()
+                            .getStatus()
+                            .value();
+                }));
+            }
+            assertThat(allReady.await(10, TimeUnit.SECONDS)).isTrue();
+            startGun.countDown();
+
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> response : responses) {
+                statuses.add(response.get(30, TimeUnit.SECONDS));
+            }
+
+            assertThat(statuses).containsOnly(201, 409);
+            assertThat(statuses.stream().filter(status -> status == 201)).hasSize(1);
+            assertThat(statuses.stream().filter(status -> status == 409)).hasSize(attempts - 1);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        // The database, not just the HTTP responses, must hold exactly one row for this SKU.
+        client.get().uri("/api/v1/products")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<List<ProductResponse>>() {})
+                .value(products -> assertThat(products).filteredOn(product -> sku.equals(product.sku())).hasSize(1));
     }
 }
