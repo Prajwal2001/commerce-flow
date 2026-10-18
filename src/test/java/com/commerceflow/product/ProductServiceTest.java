@@ -1,5 +1,6 @@
 package com.commerceflow.product;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -9,6 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,16 +49,32 @@ class ProductServiceTest {
     }
 
     @Test
-    void duplicateSku() {
-        // Shaped like a real driver message: the service must not pass any of this text to the client.
-        when(productRepository.saveAndFlush(any(Product.class))).thenThrow(new DataIntegrityViolationException(
-                "could not execute statement [ERROR: duplicate key value violates unique constraint \"uk_internal_name\"]"));
+    void duplicateSkuIsRecognisedByTheNamedConstraint() {
+        when(productRepository.saveAndFlush(any(Product.class))).thenThrow(violationOf("uq_products_sku"));
 
         assertThatThrownBy(() -> productService.create(new CreateProductRequest("sku1", "name1", "desc1", BigDecimal.ONE)))
                 .isInstanceOf(DuplicateSkuException.class)
                 .hasMessageContaining("sku1")
+                // The client must not see driver text or constraint names.
                 .hasMessageNotContaining("duplicate key")
-                .hasMessageNotContaining("uk_internal_name");
+                .hasMessageNotContaining("uq_products_sku");
+    }
+
+    @Test
+    void otherIntegrityViolationsAreNotReportedAsDuplicateSku() {
+        // A different constraint failing is a bug or a bad deployment, not a client conflict: it must stay a 500.
+        DataIntegrityViolationException other = violationOf("ck_products_price_positive");
+        when(productRepository.saveAndFlush(any(Product.class))).thenThrow(other);
+
+        assertThatThrownBy(() -> productService.create(new CreateProductRequest("sku1", "name1", "desc1", BigDecimal.ONE)))
+                .isSameAs(other);
+    }
+
+    /** Shaped like what Spring really throws: a DataIntegrityViolationException wrapping Hibernate's, which carries the constraint name. */
+    private static DataIntegrityViolationException violationOf(String constraintName) {
+        String message = "could not execute statement [ERROR: duplicate key value violates unique constraint \"" + constraintName + "\"]";
+        return new DataIntegrityViolationException(message,
+                new ConstraintViolationException(message, new SQLException("violation"), constraintName));
     }
 
     @Test

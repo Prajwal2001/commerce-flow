@@ -11,7 +11,7 @@
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
 | 3 | Service + create/get/list endpoints, unit tests | Done: DTOs, exceptions, `ProductService`, `ProductController`, `ProductServiceTest` |
 | 4 | Centralized error handling, API and integration tests | Done: handlers, 8 controller tests, 7 end-to-end tests incl. concurrency; manual `bootRun` + `curl` and restart check performed |
-| 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Not started |
+| 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | In progress: Flyway, `validate`, constraint-name matching done; README, ADR, dev-volume reset and manual `bootRun` check remain |
 
 ## Stack (verified on this machine)
 
@@ -40,6 +40,9 @@
 | 2026-10-16 | Manual: `docker compose up -d`, `./gradlew bootRun` (started in ~4 s), `curl` | 201 + `Location`; 409 duplicate; 400 invalid body, malformed JSON and bad UUID; 404 unknown id; 200 list |
 | 2026-10-16 | Manual restart: stop app, `docker compose restart postgres`, `bootRun` again, `GET` earlier product | Same id, fields and `createdAt` returned: data persisted across restart of both app and database |
 | 2026-10-16 | `./gradlew test --rerun` after price normalization | **26 passed** (added `priceIsReturnedWithTwoDecimalPlacesByCreateAndGetAlike`; it failed first with `expected: 2 but was: 1`) |
+| 2026-10-18 | Wrote 4 constraint-name tests first, ran `ProductServiceTest` + `ProductRepositoryTest` before any fix | **3 failed as predicted** (zero price accepted, constraint not named `uq_products_sku`, other violations reported as duplicates) |
+| 2026-10-18 | `./gradlew test --rerun` after Flyway `V1` migration, `ddl-auto: validate`, named-constraint matching | **29 passed** (1 + 8 controller + 5 service + 8 repository + 7 integration) |
+| 2026-10-18 | Experiment: migration `numeric(10,2)` vs entity `precision = 12`, ran `contextLoads` | Startup **succeeded**: `validate` checks column types, not precision/scale. Migration restored |
 
 ## Architectural decisions
 
@@ -75,8 +78,6 @@
 ## Known issues
 
 - A native PostgreSQL 16 listens on `127.0.0.1:5432`, so `compose.yaml` publishes the container on host port **5433**.
-- The service reports any integrity violation as a duplicate SKU; Stage 5 names the constraint so it can be matched precisely.
-- Hibernate named the SKU unique constraint automatically (`ukfhmd06...`); Flyway in Stage 5 gives it a stable name.
 - `ddl-auto: update` never drops anything; the old `product` table from before `@Table` may still exist in the native database.
 
 ## Next task

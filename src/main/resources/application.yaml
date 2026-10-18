@@ -9,8 +9,8 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      # Temporary: replaced by Flyway migrations + "validate" before Milestone 1 is complete.
-      ddl-auto: update
+      # Flyway owns the schema; Hibernate only checks that the entities match it.
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true

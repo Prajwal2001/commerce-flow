@@ -1,5 +1,6 @@
 package com.commerceflow.product;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +10,8 @@ import java.util.UUID;
 
 @Service
 public class ProductService {
+
+    private static final String SKU_CONSTRAINT = "uq_products_sku";
 
     private final ProductRepository productRepository;
 
@@ -26,8 +29,21 @@ public class ProductService {
         } catch (DataIntegrityViolationException e) {
             // The database constraint is the source of truth; an existsBySku check first would race
             // with a concurrent request. Do not expose e.getMessage(): it contains SQL and constraint names.
-            throw new DuplicateSkuException("Product with SKU '" + request.sku() + "' already exists");
+            if (violatesSkuConstraint(e)) {
+                throw new DuplicateSkuException("Product with SKU '" + request.sku() + "' already exists");
+            }
+            throw e;
         }
+    }
+
+    /** The constraint name is the contract with V1__create_products.sql; walk the cause chain because wrapping depth can vary. */
+    private static boolean violatesSkuConstraint(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof ConstraintViolationException cve && SKU_CONSTRAINT.equals(cve.getConstraintName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)
