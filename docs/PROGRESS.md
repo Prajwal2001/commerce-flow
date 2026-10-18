@@ -11,7 +11,7 @@
 | 2 | `Product` entity, repository, Testcontainers constraint tests | Done: 6 repository tests + `contextLoads` passing against Testcontainers PostgreSQL |
 | 3 | Service + create/get/list endpoints, unit tests | Done: DTOs, exceptions, `ProductService`, `ProductController`, `ProductServiceTest` |
 | 4 | Centralized error handling, API and integration tests | Done: handlers, 8 controller tests, 7 end-to-end tests incl. concurrency; manual `bootRun` + `curl` and restart check performed |
-| 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | In progress: Flyway, `validate`, constraint-name matching done; README, ADR, dev-volume reset and manual `bootRun` check remain |
+| 5 | Flyway migration, remove `ddl-auto`, README, ADR-0001 | Done: Flyway `V1`, `validate`, constraint-name matching, dev volume reset and manual `bootRun` check, README, ADR-0001 |
 
 ## Stack (verified on this machine)
 
@@ -42,11 +42,12 @@
 | 2026-10-16 | `./gradlew test --rerun` after price normalization | **26 passed** (added `priceIsReturnedWithTwoDecimalPlacesByCreateAndGetAlike`; it failed first with `expected: 2 but was: 1`) |
 | 2026-10-18 | Wrote 4 constraint-name tests first, ran `ProductServiceTest` + `ProductRepositoryTest` before any fix | **3 failed as predicted** (zero price accepted, constraint not named `uq_products_sku`, other violations reported as duplicates) |
 | 2026-10-18 | `./gradlew test --rerun` after Flyway `V1` migration, `ddl-auto: validate`, named-constraint matching | **29 passed** (1 + 8 controller + 5 service + 8 repository + 7 integration) |
+| 2026-10-18 | `docker compose down -v` + `up -d --wait` (dev DB was already empty), `bootRun` | Flyway applied `V1` to an empty schema, `validate` passed, started in 3.9 s; `\d products` shows `uq_products_sku` and `ck_products_price_positive`; `curl`: 201 (price `79.90`), 409, 400, list 200 |
 | 2026-10-18 | Experiment: migration `numeric(10,2)` vs entity `precision = 12`, ran `contextLoads` | Startup **succeeded**: `validate` checks column types, not precision/scale. Migration restored |
 
 ## Architectural decisions
 
-- Modular monolith first, package-by-feature (`com.commerceflow.product`); ADR to be written in Stage 5.
+- Modular monolith first, package-by-feature (`com.commerceflow.product`); see [ADR-0001](adr/0001-modular-monolith-first.md).
 - Base package `com.commerceflow` (Initializr generated `com.commerceflow.commerceflow`).
 - Lombok removed: DTOs will be records; the entity is written by hand.
 - Tests get their own throwaway PostgreSQL via Testcontainers (`@ServiceConnection`), never the dev database; Testcontainers 2.0.5 versions come from the Boot BOM.
@@ -78,8 +79,17 @@
 ## Known issues
 
 - A native PostgreSQL 16 listens on `127.0.0.1:5432`, so `compose.yaml` publishes the container on host port **5433**.
-- `ddl-auto: update` never drops anything; the old `product` table from before `@Table` may still exist in the native database.
+- The old `product` table from before `@Table` may still exist in the native PostgreSQL on 5432 (not used by the app any more).
+- `ddl-auto: validate` does not compare precision, scale or length; migrations need review and the real-schema tests are the safety net.
+- HTTP response body for a non-SKU integrity violation (500) is not covered by a test.
+
+## Concepts covered in Stage 5 (add to the list above)
+
+- Spring wraps Hibernate's `ConstraintViolationException` (which carries the constraint name) inside `DataIntegrityViolationException`; match on the name, not the message, walking the cause chain.
+- Name constraints in the migration and treat the names as a contract with the Java code.
+- `ddl-auto: validate` checks tables, columns and column types, not precision, scale or length (verified by experiment).
+- Flyway filenames need `V<version>__<description>.sql` with two underscores.
 
 ## Next task
 
-Stage 5: Flyway migration `V1__create_products.sql` with named constraints (`uq_products_sku`, `ck_products_price_positive`), `ddl-auto: validate`, match the constraint name in duplicate detection, README with setup and `curl` examples, ADR-0001.
+Milestone 1 is complete. Milestone 2 (not started): pagination and sorting, OpenAPI documentation, update/delete, a minimal GitHub Actions CI workflow.
