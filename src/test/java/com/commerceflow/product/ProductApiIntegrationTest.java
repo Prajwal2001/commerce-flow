@@ -250,7 +250,7 @@ class ProductApiIntegrationTest {
 
         ProductResponse updated = client.put().uri("/api/v1/products/{id}", created.id())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new UpdateProductRequest("Keyboard v2", null, new BigDecimal("89.9")))
+                .body(new UpdateProductRequest("Keyboard v2", null, new BigDecimal("89.9"), created.version()))
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(ProductResponse.class)
@@ -279,7 +279,7 @@ class ProductApiIntegrationTest {
     void updateOfAnUnknownProductReturns404() {
         client.put().uri("/api/v1/products/{id}", UUID.randomUUID())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new UpdateProductRequest("Keyboard", null, BigDecimal.TEN))
+                .body(new UpdateProductRequest("Keyboard", null, BigDecimal.TEN, 0L))
                 .exchange()
                 .expectStatus().isNotFound()
                 .expectBody()
@@ -292,7 +292,7 @@ class ProductApiIntegrationTest {
 
         client.put().uri("/api/v1/products/{id}", created.id())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new UpdateProductRequest("Changed", null, BigDecimal.ZERO))
+                .body(new UpdateProductRequest("Changed", null, BigDecimal.ZERO, created.version()))
                 .exchange()
                 .expectStatus().isBadRequest();
 
@@ -321,5 +321,91 @@ class ProductApiIntegrationTest {
         ProductResponse second = createProduct(sku);
 
         assertThat(second.id()).isNotEqualTo(first.id());
+    }
+
+    private RestTestClient.ResponseSpec put(UUID id, UpdateProductRequest body) {
+        return client.put().uri("/api/v1/products/{id}", id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .exchange();
+    }
+
+    @Test
+    void aNewProductStartsAtVersionZeroAndEachUpdateIncrementsIt() {
+        ProductResponse created = createProduct(uniqueSku());
+        assertThat(created.version()).isEqualTo(0L);
+
+        ProductResponse updated = put(created.id(), new UpdateProductRequest("v1", null, BigDecimal.TEN, 0L)) 
+                .expectStatus().isOk().expectBody(ProductResponse.class).returnResult().getResponseBody();
+
+        assertThat(updated).isNotNull();
+        assertThat(updated.version()).isEqualTo(1L);
+        client.get().uri("/api/v1/products/{id}", created.id()).exchange()
+                .expectBody(ProductResponse.class)
+                .value(fetched -> assertThat(fetched.version()).isEqualTo(1L));
+    }
+
+    @Test
+    void anUpdateBasedOnAnOldVersionIsRejectedWith409AndDoesNotOverwrite() {
+        ProductResponse created = createProduct(uniqueSku());
+        put(created.id(), new UpdateProductRequest("first writer", null, BigDecimal.TEN, 0L)) 
+                .expectStatus().isOk();
+
+        // The second writer still holds version 0.
+        put(created.id(), new UpdateProductRequest("second writer", null, BigDecimal.ONE, 0L)) 
+                .expectStatus().isEqualTo(HttpStatus.CONFLICT)
+                .expectBody()
+                .jsonPath("$.title").isEqualTo("Version conflict");
+
+        client.get().uri("/api/v1/products/{id}", created.id()).exchange()
+                .expectBody(ProductResponse.class)
+                .value(fetched -> {
+                    assertThat(fetched.name()).isEqualTo("first writer");
+                    assertThat(fetched.version()).isEqualTo(1L);
+                });
+    }
+
+    @Test
+    void concurrentUpdatesFromTheSameVersionYieldExactlyOneWinner() throws Exception {
+        int attempts = 10;
+        ProductResponse created = createProduct(uniqueSku());
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        CountDownLatch allReady = new CountDownLatch(attempts);
+        CountDownLatch startGun = new CountDownLatch(1);
+
+        try {
+            List<Future<Integer>> responses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                String name = "writer-" + i;
+                responses.add(pool.submit(() -> {
+                    allReady.countDown();
+                    startGun.await();
+                    return client.put().uri("/api/v1/products/{id}", created.id())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(new UpdateProductRequest(name, null, BigDecimal.TEN, 0L))
+                            .exchange()
+                            .returnResult()
+                            .getStatus()
+                            .value();
+                }));
+            }
+            assertThat(allReady.await(10, TimeUnit.SECONDS)).isTrue();
+            startGun.countDown();
+
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> response : responses) {
+                statuses.add(response.get(30, TimeUnit.SECONDS));
+            }
+
+            assertThat(statuses).containsOnly(200, 409);
+            assertThat(statuses.stream().filter(status -> status == 200)).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        // Exactly one UPDATE took effect: the version moved from 0 to 1, not further.
+        client.get().uri("/api/v1/products/{id}", created.id()).exchange()
+                .expectBody(ProductResponse.class)
+                .value(fetched -> assertThat(fetched.version()).isEqualTo(1L));
     }
 }

@@ -111,9 +111,12 @@ class ProductServiceTest {
         UUID id = UUID.randomUUID();
         Product existing = new Product("sku1", "old name", "old desc", BigDecimal.TEN);
         ReflectionTestUtils.setField(existing, "id", id);
+        ReflectionTestUtils.setField(existing, "version", 3L);
         when(productRepository.findById(id)).thenReturn(Optional.of(existing));
+        // For a managed entity the real saveAndFlush returns the same instance.
+        when(productRepository.saveAndFlush(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProductResponse response = productService.update(id, new UpdateProductRequest("new name", null, new BigDecimal("25.5")));
+        ProductResponse response = productService.update(id, new UpdateProductRequest("new name", null, new BigDecimal("25.5"), 3L));
 
         assertThat(response.id()).isEqualTo(id);
         assertThat(response.sku()).isEqualTo("sku1");
@@ -128,7 +131,23 @@ class ProductServiceTest {
     void updateOfAMissingProductThrowsNotFound() {
         when(productRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> productService.update(UUID.randomUUID(), new UpdateProductRequest("n", null, BigDecimal.ONE)))
+        assertThatThrownBy(() -> productService.update(UUID.randomUUID(), new UpdateProductRequest("n", null, BigDecimal.ONE, 0L)))
                 .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void updateWithAStaleVersionIsRejectedAndChangesNothing() {
+        UUID id = UUID.randomUUID();
+        Product existing = new Product("sku1", "old name", "old desc", BigDecimal.TEN);
+        ReflectionTestUtils.setField(existing, "id", id);
+        ReflectionTestUtils.setField(existing, "version", 3L);
+        when(productRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> productService.update(id, new UpdateProductRequest("new name", null, BigDecimal.ONE, 2L)))
+                .isInstanceOf(ProductVersionConflictException.class);
+
+        assertThat(existing.getName()).isEqualTo("old name");
+        assertThat(existing.getPrice()).isEqualByComparingTo("10");
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
     }
 }

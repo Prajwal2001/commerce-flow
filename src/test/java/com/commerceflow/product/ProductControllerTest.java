@@ -47,7 +47,7 @@ class ProductControllerTest {
     private ProductService productService;
 
     private ProductResponse sampleResponse(UUID id) {
-        return new ProductResponse(id, "KB-001", "Keyboard", "Mechanical", new BigDecimal("79.99"), Instant.parse("2026-10-12T10:00:00Z"));
+        return new ProductResponse(id, "KB-001", "Keyboard", "Mechanical", new BigDecimal("79.99"), Instant.parse("2026-10-12T10:00:00Z"), 0L);
     }
 
     @Test
@@ -185,7 +185,7 @@ class ProductControllerTest {
     }
 
     private static final String VALID_UPDATE = """
-            {"name": "Keyboard v2", "description": "Hot-swappable", "price": 89.90}
+            {"name": "Keyboard v2", "description": "Hot-swappable", "price": 89.90, "version": 4}
             """;
 
     @Test
@@ -201,6 +201,47 @@ class ProductControllerTest {
         verify(productService).update(eq(id), captor.capture());
         assertThat(captor.getValue().name()).isEqualTo("Keyboard v2");
         assertThat(captor.getValue().price()).isEqualByComparingTo("89.90");
+        assertThat(captor.getValue().version()).isEqualTo(4L);
+    }
+
+    @Test
+    void updateWithoutAVersionReturns400() throws Exception {
+        // Without the version the server cannot tell a stale write from a fresh one.
+        mockMvc.perform(put("/api/v1/products/{id}", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Keyboard v2", "price": 89.90}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'version')]").exists());
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void updateWithAStaleVersionReturns409() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(productService.update(eq(id), any(UpdateProductRequest.class)))
+                .thenThrow(new ProductVersionConflictException("Product " + id + " was changed by someone else; reload and retry"));
+
+        mockMvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON).content(VALID_UPDATE))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Version conflict"))
+                // Hibernate's own message names the entity class and id; the client must not see internals.
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("com.commerceflow"))));
+    }
+
+    @Test
+    void aLockingFailureRaisedAtCommitTimeAlsoReturns409() throws Exception {
+        // The race case: both writers passed the version check, the database refused the loser's UPDATE.
+        UUID id = UUID.randomUUID();
+        when(productService.update(eq(id), any(UpdateProductRequest.class)))
+                .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(Product.class, id));
+
+        mockMvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON).content(VALID_UPDATE))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Version conflict"))
+                // Hibernate's own message names the entity class and id; the client must not see internals.
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("com.commerceflow"))));
     }
 
     @Test

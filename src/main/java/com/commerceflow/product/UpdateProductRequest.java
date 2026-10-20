@@ -8,8 +8,12 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-/** Full replacement of the editable fields. The SKU is deliberately absent: it is immutable after creation. */
+/**
+ * Full replacement of the editable fields. The SKU is deliberately absent: it is immutable after creation.
+ * {@code version} is the version the client last read; a mismatch means someone else changed the product since.
+ */
 public record UpdateProductRequest(@NotBlank @Size(max = 255) String name,
                                    @Size(max = 2000) String description,
-                                   @NotNull @Positive @Digits(integer = 10, fraction = 2) BigDecimal price) {
+                                   @NotNull @Positive @Digits(integer = 10, fraction = 2) BigDecimal price,
+                                   @NotNull Long version) {
 }

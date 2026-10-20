@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-public record ProductResponse(UUID id, String sku, String name, String description, BigDecimal price, Instant createdAt) {
+public record ProductResponse(UUID id, String sku, String name, String description, BigDecimal price, Instant createdAt, Long version) {
 
     static ProductResponse from(Product product) {
         return new ProductResponse(
@@ -13,6 +13,7 @@ public record ProductResponse(UUID id, String sku, String name, String descripti
                 product.getName(),
                 product.getDescription(),
                 product.getPrice(),
-                product.getCreatedAt());
+                product.getCreatedAt(),
+                product.getVersion());
     }
 }

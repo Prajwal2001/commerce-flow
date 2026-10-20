@@ -71,6 +71,9 @@ class OpenApiDocumentationTest {
                 .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['200']").exists()
                 .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['400']").exists()
                 .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['404']").exists()
+                .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['409']").exists()
+                .jsonPath("$.components.schemas.UpdateProductRequest.required").value(required ->
+                        org.assertj.core.api.Assertions.assertThat(required.toString()).contains("version"))
                 // The SKU is immutable, so the update body must not offer it.
                 .jsonPath("$.components.schemas.UpdateProductRequest.properties.sku").doesNotExist()
                 .jsonPath("$.components.schemas.UpdateProductRequest.properties.name").exists();

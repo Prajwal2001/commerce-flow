@@ -9,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 @Service
 public class ProductService {
@@ -69,9 +68,15 @@ public class ProductService {
     public ProductResponse update(UUID id, UpdateProductRequest request) {
         Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
 
+        if (product.getVersion() != request.version()) {
+            throw new ProductVersionConflictException("Product version " + product.getVersion() + " not matching with requested product version: " + request.version());
+        }
+
         product.updateData(request.name(), request.description(), request.price());
 
-        return ProductResponse.from(product);
+        Product updatedProduct = productRepository.saveAndFlush(product);
+
+        return ProductResponse.from(updatedProduct);
     }
 
     @Transactional

@@ -86,12 +86,14 @@ public class ProductController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Replace a product's editable fields",
-            description = "Replaces name, description and price. The SKU cannot be changed.")
+            description = "Replaces name, description and price. The SKU cannot be changed. Send back the `version` you read; if the product has changed since, the request is rejected with 409 instead of overwriting the other change.")
     @ApiResponse(responseCode = "200", description = "The updated product",
             content = @Content(schema = @Schema(implementation = ProductResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid id or request body; `errors` lists each failing field",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "404", description = "No product with this id",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "409", description = "`version` is stale: the product was changed since it was read. Reload it and retry",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     public ProductResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateProductRequest request) {
         return productService.update(id, request);
