@@ -42,6 +42,8 @@ The tests build their schema from the same Flyway migration the app uses.
 
 ## API
 
+Interactive documentation: <http://localhost:8080/swagger-ui/index.html> (raw OpenAPI document at `/v3/api-docs`). It is generated from the controller annotations and checked by `OpenApiDocumentationTest`.
+
 Base path `/api/v1/products`.
 
 | Method | Path | Success | Errors |
@@ -122,7 +124,6 @@ curl localhost:8080/api/v1/products/<id>               # same id, fields and cre
 ## Known limitations
 
 - No update or delete yet (Milestone 2).
-- No OpenAPI documentation yet (Milestone 2); this README is the API reference for now.
 - No authentication or authorization.
 - CI: `.github/workflows/ci.yml` runs `./gradlew clean test` on every PR and push to `main`. It has been run locally in the same form but **not yet on GitHub** (no remote configured at the time of writing).
 - A non-SKU integrity violation is rethrown by the service and handled as an unexpected error (`500`) by design; the service-level rethrow is unit-tested, but the HTTP response body for that case has not been verified.

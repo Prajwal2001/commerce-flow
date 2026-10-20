@@ -96,9 +96,9 @@
 |---|---|
 | CI workflow (`.github/workflows/ci.yml`: checkout, Temurin 25, Gradle cache, `./gradlew clean test`, test report on failure) | Written. Locally: YAML parses, and `./gradlew clean test --no-daemon` passed (29 tests, 1m 6s). **Not yet run on GitHub**: no remote is configured |
 | Pagination and sorting | Done: `GET /api/v1/products?page&size&sort` returns a `PageResponse` envelope; size 1 to 100, whitelisted sort fields, bad values are 400 (`Invalid sort` title). Tests written first (10 red against a stub), then green; mutation check (whitelist disabled) failed exactly the two sort tests. Breaking change: the list is no longer a plain array |
-| OpenAPI documentation | Not started |
+| OpenAPI documentation | Done: springdoc 3.1.1 (built against Boot 4.1.0, works on 4.1.1). Swagger UI at `/swagger-ui/index.html`. Zero-annotation output documented POST as `200` with no errors; annotations add 201/400/404/409 with `application/problem+json` + `ProblemDetail`. 6 tests written first (5 red), then green; mutation (409 renamed to 418) failed exactly 2 tests. Full suite: 45 passed |
 | Update / delete | Not started |
 
 ## Next task
 
-Confirm the first CI run on GitHub is green (not yet reported); then OpenAPI documentation.
+Confirm the first CI run on GitHub is green (not yet reported); then update and delete.
