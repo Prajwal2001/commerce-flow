@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch or PR cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The build pins a Java 25 toolchain; install it explicitly so Gradle never has to fall back or download.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # Caches Gradle dependencies and validates the checksum of the Gradle wrapper jar.
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Testcontainers needs Docker; GitHub-hosted Ubuntu runners include it.
+      - name: Test
+        run: ./gradlew clean test --no-daemon
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7

@@ -80,6 +80,27 @@ class ProductRepositoryTest {
     }
 
     @Test
+    void duplicateSkuViolationNamesTheConstraint() {
+        productRepository.saveAndFlush(new Product("sku1", "name1", "desc1", BigDecimal.TEN));
+
+        assertThatThrownBy(() -> productRepository.saveAndFlush(new Product("sku1", "other", null, BigDecimal.TEN)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .cause()
+                .isInstanceOfSatisfying(org.hibernate.exception.ConstraintViolationException.class,
+                        e -> assertThat(e.getConstraintName()).isEqualTo("uq_products_sku"));
+    }
+
+    @Test
+    void zeroPriceIsRejectedByDatabase() {
+        // Bean Validation says @Positive, but the database must not rely on every caller going through it.
+        assertThatThrownBy(() -> productRepository.saveAndFlush(new Product("sku1", "name1", null, BigDecimal.ZERO)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .cause()
+                .isInstanceOfSatisfying(org.hibernate.exception.ConstraintViolationException.class,
+                        e -> assertThat(e.getConstraintName()).isEqualTo("ck_products_price_positive"));
+    }
+
+    @Test
     void nullSkuIsRejectedByDatabase() {
         Product product = new Product(null, "name1", "desc1", BigDecimal.TEN);
 
