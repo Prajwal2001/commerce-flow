@@ -64,4 +64,20 @@ public class ProductService {
 
         return new PageResponse<>(productResponseList, pageable.getPageNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages());
     }
+
+    @Transactional
+    public ProductResponse update(UUID id, UpdateProductRequest request) {
+        Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
+
+        product.updateData(request.name(), request.description(), request.price());
+
+        return ProductResponse.from(product);
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
+
+        productRepository.delete(product);
+    }
 }

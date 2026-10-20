@@ -65,6 +65,12 @@ public class Product {
         return createdAt;
     }
 
+    void updateData(String name, String description, BigDecimal price) {
+        this.name = name;
+        this.description = description;
+        this.price = normalize(price);
+    }
+
     /**
      * Prices are stored as numeric(12,2). Normalizing to scale 2 up front means the object we return
      * after saving matches what a later read returns. UNNECESSARY makes a value with more than two

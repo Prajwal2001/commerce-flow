@@ -106,4 +106,29 @@ class ProductServiceTest {
         assertThat(response.totalPages()).isEqualTo(4);   // ceil(7 / 2)
     }
 
+    @Test
+    void updateChangesTheEditableFieldsAndKeepsIdentity() {
+        UUID id = UUID.randomUUID();
+        Product existing = new Product("sku1", "old name", "old desc", BigDecimal.TEN);
+        ReflectionTestUtils.setField(existing, "id", id);
+        when(productRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        ProductResponse response = productService.update(id, new UpdateProductRequest("new name", null, new BigDecimal("25.5")));
+
+        assertThat(response.id()).isEqualTo(id);
+        assertThat(response.sku()).isEqualTo("sku1");
+        assertThat(response.name()).isEqualTo("new name");
+        assertThat(response.description()).isNull();
+        // Same invariant as create: two decimals, so a PUT response matches what a later GET returns.
+        assertThat(response.price()).isEqualTo(new BigDecimal("25.50"));
+        assertThat(response.createdAt()).isEqualTo(existing.getCreatedAt());
+    }
+
+    @Test
+    void updateOfAMissingProductThrowsNotFound() {
+        when(productRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.update(UUID.randomUUID(), new UpdateProductRequest("n", null, BigDecimal.ONE)))
+                .isInstanceOf(ProductNotFoundException.class);
+    }
 }

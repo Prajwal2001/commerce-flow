@@ -65,6 +65,28 @@ class OpenApiDocumentationTest {
     }
 
     @Test
+    void updateDocumentsSuccessAndErrorResponses() {
+        apiDocs()
+                .jsonPath("$.paths['/api/v1/products/{id}'].put.summary").isNotEmpty()
+                .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['200']").exists()
+                .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['400']").exists()
+                .jsonPath("$.paths['/api/v1/products/{id}'].put.responses['404']").exists()
+                // The SKU is immutable, so the update body must not offer it.
+                .jsonPath("$.components.schemas.UpdateProductRequest.properties.sku").doesNotExist()
+                .jsonPath("$.components.schemas.UpdateProductRequest.properties.name").exists();
+    }
+
+    @Test
+    void deleteDocumentsNoContentAndNotFound() {
+        apiDocs()
+                .jsonPath("$.paths['/api/v1/products/{id}'].delete.summary").isNotEmpty()
+                .jsonPath("$.paths['/api/v1/products/{id}'].delete.responses['204']").exists()
+                .jsonPath("$.paths['/api/v1/products/{id}'].delete.responses['400']").exists()
+                .jsonPath("$.paths['/api/v1/products/{id}'].delete.responses['404']").exists()
+                .jsonPath("$.paths['/api/v1/products/{id}'].delete.responses['204'].content").doesNotExist();
+    }
+
+    @Test
     void errorResponsesAreDescribedAsProblemDetails() {
         // A client generated from this document must know the error body has a title and a detail.
         apiDocs()

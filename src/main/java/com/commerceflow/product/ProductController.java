@@ -13,15 +13,10 @@ import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
@@ -87,6 +82,31 @@ public class ProductController {
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
         Pageable pageable = PageRequest.of(page, size, parseSort(sort));
         return productService.list(pageable);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Replace a product's editable fields",
+            description = "Replaces name, description and price. The SKU cannot be changed.")
+    @ApiResponse(responseCode = "200", description = "The updated product",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Invalid id or request body; `errors` lists each failing field",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "No product with this id",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    public ProductResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateProductRequest request) {
+        return productService.update(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete a product", description = "Permanent. The SKU becomes available again.")
+    @ApiResponse(responseCode = "204", description = "Deleted", content = @Content)
+    @ApiResponse(responseCode = "400", description = "The id is not a valid UUID",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "No product with this id",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        productService.delete(id);
     }
 
     /** Parses "property[,direction]"; anything outside the whitelist is a client error, not a database error. */

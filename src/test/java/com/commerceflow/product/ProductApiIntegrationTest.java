@@ -231,4 +231,95 @@ class ProductApiIntegrationTest {
                 .expectBody(ProductResponse.class)
                 .value(fetched -> assertThat(fetched.price()).isEqualTo(created.price()));
     }
+
+    private ProductResponse createProduct(String sku) {
+        return client.post().uri("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request(sku))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(ProductResponse.class)
+                .returnResult()
+                .getResponseBody();
+    }
+
+    @Test
+    void updatedFieldsAreVisibleOnLaterReadsAndIdentityIsKept() {
+        String sku = uniqueSku();
+        ProductResponse created = createProduct(sku);
+
+        ProductResponse updated = client.put().uri("/api/v1/products/{id}", created.id())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new UpdateProductRequest("Keyboard v2", null, new BigDecimal("89.9")))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(ProductResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(updated).isNotNull();
+        assertThat(updated.price().scale()).isEqualTo(2);
+
+        client.get().uri("/api/v1/products/{id}", created.id())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(ProductResponse.class)
+                .value(fetched -> {
+                    assertThat(fetched).isEqualTo(updated);          // PUT and GET agree
+                    assertThat(fetched.id()).isEqualTo(created.id());
+                    assertThat(fetched.sku()).isEqualTo(sku);        // immutable
+                    assertThat(fetched.createdAt()).isEqualTo(created.createdAt());
+                    assertThat(fetched.name()).isEqualTo("Keyboard v2");
+                    assertThat(fetched.description()).isNull();
+                    assertThat(fetched.price()).isEqualByComparingTo("89.90");
+                });
+    }
+
+    @Test
+    void updateOfAnUnknownProductReturns404() {
+        client.put().uri("/api/v1/products/{id}", UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new UpdateProductRequest("Keyboard", null, BigDecimal.TEN))
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.title").isEqualTo("Product not found");
+    }
+
+    @Test
+    void updateWithAnInvalidPriceReturns400AndChangesNothing() {
+        ProductResponse created = createProduct(uniqueSku());
+
+        client.put().uri("/api/v1/products/{id}", created.id())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new UpdateProductRequest("Changed", null, BigDecimal.ZERO))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        client.get().uri("/api/v1/products/{id}", created.id())
+                .exchange()
+                .expectBody(ProductResponse.class)
+                .value(fetched -> assertThat(fetched.name()).isEqualTo("Keyboard"));
+    }
+
+    @Test
+    void deletedProductIsGoneAndASecondDeleteReturns404() {
+        ProductResponse created = createProduct(uniqueSku());
+
+        client.delete().uri("/api/v1/products/{id}", created.id()).exchange().expectStatus().isNoContent();
+        client.get().uri("/api/v1/products/{id}", created.id()).exchange().expectStatus().isNotFound();
+        client.delete().uri("/api/v1/products/{id}", created.id()).exchange().expectStatus().isNotFound();
+    }
+
+    @Test
+    void aDeletedProductsSkuCanBeUsedAgain() {
+        // Hard delete: the row is gone, so the unique constraint no longer holds the SKU.
+        String sku = uniqueSku();
+        ProductResponse first = createProduct(sku);
+        client.delete().uri("/api/v1/products/{id}", first.id()).exchange().expectStatus().isNoContent();
+
+        ProductResponse second = createProduct(sku);
+
+        assertThat(second.id()).isNotEqualTo(first.id());
+    }
 }

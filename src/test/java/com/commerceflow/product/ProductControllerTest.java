@@ -19,11 +19,16 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -174,6 +179,85 @@ class ProductControllerTest {
     })
     void invalidPagingParametersReturn400WithoutCallingTheService(String query) throws Exception {
         mockMvc.perform(get("/api/v1/products?" + query))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(productService);
+    }
+
+    private static final String VALID_UPDATE = """
+            {"name": "Keyboard v2", "description": "Hot-swappable", "price": 89.90}
+            """;
+
+    @Test
+    void updateReturns200WithTheUpdatedProduct() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(productService.update(eq(id), any(UpdateProductRequest.class))).thenReturn(sampleResponse(id));
+
+        mockMvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON).content(VALID_UPDATE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        ArgumentCaptor<UpdateProductRequest> captor = ArgumentCaptor.forClass(UpdateProductRequest.class);
+        verify(productService).update(eq(id), captor.capture());
+        assertThat(captor.getValue().name()).isEqualTo("Keyboard v2");
+        assertThat(captor.getValue().price()).isEqualByComparingTo("89.90");
+    }
+
+    @Test
+    void updateWithInvalidFieldsReturns400ListingEachField() throws Exception {
+        mockMvc.perform(put("/api/v1/products/{id}", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "", "price": -1}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'name')]").exists())
+                .andExpect(jsonPath("$.errors[?(@.field == 'price')]").exists());
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void updateOfAnUnknownProductReturns404() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(productService.update(eq(id), any(UpdateProductRequest.class))).thenThrow(new ProductNotFoundException("Product not found: " + id));
+
+        mockMvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON).content(VALID_UPDATE))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Product not found"));
+    }
+
+    @Test
+    void updateWithAMalformedIdReturns400() throws Exception {
+        mockMvc.perform(put("/api/v1/products/{id}", "not-a-uuid").contentType(MediaType.APPLICATION_JSON).content(VALID_UPDATE))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void deleteReturns204WithNoBody() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/products/{id}", id))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(productService).delete(id);
+    }
+
+    @Test
+    void deleteOfAnUnknownProductReturns404() throws Exception {
+        UUID id = UUID.randomUUID();
+        doThrow(new ProductNotFoundException("Product not found: " + id)).when(productService).delete(id);
+
+        mockMvc.perform(delete("/api/v1/products/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Product not found"));
+    }
+
+    @Test
+    void deleteWithAMalformedIdReturns400() throws Exception {
+        mockMvc.perform(delete("/api/v1/products/{id}", "not-a-uuid"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(productService);

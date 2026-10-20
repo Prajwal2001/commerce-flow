@@ -97,8 +97,9 @@
 | CI workflow (`.github/workflows/ci.yml`: checkout, Temurin 25, Gradle cache, `./gradlew clean test`, test report on failure) | Written. Locally: YAML parses, and `./gradlew clean test --no-daemon` passed (29 tests, 1m 6s). **Not yet run on GitHub**: no remote is configured |
 | Pagination and sorting | Done: `GET /api/v1/products?page&size&sort` returns a `PageResponse` envelope; size 1 to 100, whitelisted sort fields, bad values are 400 (`Invalid sort` title). Tests written first (10 red against a stub), then green; mutation check (whitelist disabled) failed exactly the two sort tests. Breaking change: the list is no longer a plain array |
 | OpenAPI documentation | Done: springdoc 3.1.1 (built against Boot 4.1.0, works on 4.1.1). Swagger UI at `/swagger-ui/index.html`. Zero-annotation output documented POST as `200` with no errors; annotations add 201/400/404/409 with `application/problem+json` + `ProblemDetail`. 6 tests written first (5 red), then green; mutation (409 renamed to 418) failed exactly 2 tests. Full suite: 45 passed |
-| Update / delete | Not started |
+| Update / delete | Done (without versioning): `PUT /{id}` replaces name/description/price (SKU immutable), `DELETE /{id}` is a hard delete returning 204. 16 tests written first (14 behaviour + 2 documentation), all red against stubs, then green. Full suite: 61 passed. Dirty checking means `update` needs no `save`. Review found `DELETE` returning 200 instead of 204 (void controller method) |
+| Optimistic locking (`@Version`, Flyway V2, version in request/response, 409 on stale) | Not started |
 
 ## Next task
 
-Confirm the first CI run on GitHub is green (not yet reported); then update and delete.
+Confirm the first CI run on GitHub is green (not yet reported); then optimistic locking for updates (V2 migration, two-threads-one-409 test).
