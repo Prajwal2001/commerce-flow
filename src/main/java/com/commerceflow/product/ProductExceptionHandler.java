@@ -22,4 +22,11 @@ class ProductExceptionHandler {
         problem.setTitle("Duplicate SKU");
         return problem;
     }
+
+    @ExceptionHandler(InvalidSortException.class)
+    ProblemDetail handleInvalidSort(InvalidSortException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Invalid sort");
+        return problem;
+    }
 }

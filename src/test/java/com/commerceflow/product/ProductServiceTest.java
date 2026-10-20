@@ -7,6 +7,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -86,18 +90,20 @@ class ProductServiceTest {
     }
 
     @Test
-    void productList() {
-        when(productRepository.findAll()).thenReturn(List.of(
-                new Product("sku1", "name1", "desc1", BigDecimal.ONE),
-                new Product("sku2", "name2", "desc2", BigDecimal.TWO)
-        ));
+    void listMapsTheRepositoryPageToAResponse() {
+        Pageable pageable = PageRequest.of(1, 2, Sort.by("price"));
+        when(productRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(
+                new Product("sku3", "name3", "desc3", BigDecimal.ONE),
+                new Product("sku4", "name4", "desc4", BigDecimal.TWO)
+        ), pageable, 7));
 
-        List<ProductResponse> productResponses = productService.list();
+        PageResponse<ProductResponse> response = productService.list(pageable);
 
-        assertThat(productResponses).isNotNull();
-        assertThat(productResponses)
-                .extracting(ProductResponse::sku)
-                .containsExactly("sku1", "sku2");
+        assertThat(response.content()).extracting(ProductResponse::sku).containsExactly("sku3", "sku4");
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(2);
+        assertThat(response.totalElements()).isEqualTo(7);
+        assertThat(response.totalPages()).isEqualTo(4);   // ceil(7 / 2)
     }
 
 }

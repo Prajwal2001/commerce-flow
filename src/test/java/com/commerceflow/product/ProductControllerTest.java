@@ -1,6 +1,11 @@
 package com.commerceflow.product;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -12,7 +17,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -116,11 +123,65 @@ class ProductControllerTest {
     }
 
     @Test
-    void listReturnsProducts() throws Exception {
-        when(productService.list()).thenReturn(List.of(sampleResponse(UUID.randomUUID()), sampleResponse(UUID.randomUUID())));
+    void listReturnsThePageEnvelope() throws Exception {
+        PageResponse<ProductResponse> page = new PageResponse<>(
+                List.of(sampleResponse(UUID.randomUUID()), sampleResponse(UUID.randomUUID())), 0, 20, 2, 1);
+        when(productService.list(any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$.content[0].sku").value("KB-001"))
+                .andExpect(jsonPath("$.content[1]").exists())
+                .andExpect(jsonPath("$.content[2]").doesNotExist())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    void listWithoutParametersUsesTheDefaults() throws Exception {
+        when(productService.list(any(Pageable.class))).thenReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
+
+        mockMvc.perform(get("/api/v1/products")).andExpect(status().isOk());
+
+        Pageable pageable = capturedPageable();
+        assertThat(pageable.getPageNumber()).isEqualTo(0);
+        assertThat(pageable.getPageSize()).isEqualTo(20);
+        assertThat(pageable.getSort()).isEqualTo(Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    @Test
+    void listPassesPageSizeAndSortToTheService() throws Exception {
+        when(productService.list(any(Pageable.class))).thenReturn(new PageResponse<>(List.of(), 2, 5, 0, 0));
+
+        mockMvc.perform(get("/api/v1/products").param("page", "2").param("size", "5").param("sort", "price,asc"))
+                .andExpect(status().isOk());
+
+        Pageable pageable = capturedPageable();
+        assertThat(pageable.getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getPageSize()).isEqualTo(5);
+        assertThat(pageable.getSort()).isEqualTo(Sort.by(Sort.Direction.ASC, "price"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "size=101",              // above the maximum page size
+            "size=0",
+            "page=-1",
+            "sort=password,asc",     // not a sortable field
+            "sort=price,sideways"    // not a direction
+    })
+    void invalidPagingParametersReturn400WithoutCallingTheService(String query) throws Exception {
+        mockMvc.perform(get("/api/v1/products?" + query))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(productService);
+    }
+
+    private Pageable capturedPageable() {
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(productService).list(captor.capture());
+        return captor.getValue();
     }
 }

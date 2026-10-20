@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,6 +36,9 @@ class ProductApiIntegrationTest {
 
     @Autowired
     private RestTestClient client;
+
+    @Autowired
+    private ProductRepository productRepository;
 
     private static String uniqueSku() {
         return "SKU-" + UUID.randomUUID().toString().substring(0, 8);
@@ -177,11 +179,35 @@ class ProductApiIntegrationTest {
         }
 
         // The database, not just the HTTP responses, must hold exactly one row for this SKU.
-        client.get().uri("/api/v1/products")
+        assertThat(productRepository.findAll()).filteredOn(product -> sku.equals(product.getSku())).hasSize(1);
+    }
+
+    @Test
+    void listIsPagedNewestFirstByDefault() {
+        String older = uniqueSku();
+        String newer = uniqueSku();
+        client.post().uri("/api/v1/products").contentType(MediaType.APPLICATION_JSON).body(request(older)).exchange().expectStatus().isCreated();
+        client.post().uri("/api/v1/products").contentType(MediaType.APPLICATION_JSON).body(request(newer)).exchange().expectStatus().isCreated();
+
+        client.get().uri("/api/v1/products?size=2")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<ProductResponse>>() {})
-                .value(products -> assertThat(products).filteredOn(product -> sku.equals(product.sku())).hasSize(1));
+                .expectBody()
+                .jsonPath("$.content[0].sku").isEqualTo(newer)
+                .jsonPath("$.content[1].sku").isEqualTo(older)
+                .jsonPath("$.content[2]").doesNotExist()
+                .jsonPath("$.size").isEqualTo(2)
+                .jsonPath("$.page").isEqualTo(0);
+    }
+
+    @Test
+    void unknownSortPropertyReturns400NotAServerError() {
+        client.get().uri("/api/v1/products?sort=password,asc")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.title").isEqualTo("Invalid sort")
+                .jsonPath("$.detail").value(detail -> assertThat(detail.toString()).contains("password").contains("createdAt"));
     }
 
     @Test

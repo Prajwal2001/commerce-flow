@@ -48,7 +48,7 @@ Base path `/api/v1/products`.
 |---|---|---|---|
 | `POST` | `/api/v1/products` | `201` + `Location` header + body | `400` invalid, `409` duplicate SKU |
 | `GET` | `/api/v1/products/{id}` | `200` | `400` malformed id, `404` unknown id |
-| `GET` | `/api/v1/products` | `200` (plain list; no pagination yet) | |
+| `GET` | `/api/v1/products?page=0&size=20&sort=createdAt,desc` | `200` paged list | `400` invalid paging or sort |
 
 Request fields: `sku` (required, max 64), `name` (required, max 255), `description` (optional, max 2000),
 `price` (required, greater than 0, at most 10 integer digits and 2 decimals). Prices are always returned with two decimals.
@@ -69,6 +69,12 @@ curl -i -X POST localhost:8080/api/v1/products -H 'Content-Type: application/jso
   -d '{"sku":"KB-001","name":"Other","price":10}'
 ```
 
+### Paging and sorting
+
+`page` (default 0, min 0), `size` (default 20, 1 to 100), `sort` as `property[,asc|desc]` (default `createdAt,desc`).
+Sortable properties: `createdAt`, `name`, `price`, `sku`. Anything else is a `400`, never a database error.
+The response is `{"content":[...],"page":0,"size":20,"totalElements":42,"totalPages":3}`.
+
 ### Error format
 
 Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details (`title`, `status`, `detail`, `instance`).
@@ -86,7 +92,7 @@ These are real responses captured from a running instance:
 {"detail":"Product not found: 00000000-0000-0000-0000-000000000000","instance":"/api/v1/products/00000000-0000-0000-0000-000000000000","status":404,"title":"Product not found"}
 ```
 
-Malformed JSON and a non-UUID id also return `400` with the title `Bad Request`.
+Malformed JSON and a non-UUID id also return `400` with the title `Bad Request`. An invalid sort returns `400` with the title `Invalid sort`.
 Error messages never include SQL, driver text or constraint names.
 
 ## Database
@@ -115,7 +121,7 @@ curl localhost:8080/api/v1/products/<id>               # same id, fields and cre
 
 ## Known limitations
 
-- No pagination, sorting, update or delete yet (Milestone 2).
+- No update or delete yet (Milestone 2).
 - No OpenAPI documentation yet (Milestone 2); this README is the API reference for now.
 - No authentication or authorization.
 - CI: `.github/workflows/ci.yml` runs `./gradlew clean test` on every PR and push to `main`. It has been run locally in the same form but **not yet on GitHub** (no remote configured at the time of writing).

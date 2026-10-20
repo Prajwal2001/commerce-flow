@@ -8,6 +8,9 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -77,6 +80,21 @@ class ProductRepositoryTest {
 
         assertThatThrownBy(() -> productRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void pagesAreSortedAndCountedByTheDatabase() {
+        for (int i = 1; i <= 5; i++) {
+            productRepository.save(new Product("sku" + i, "name" + i, null, BigDecimal.valueOf(i * 10)));
+        }
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Product> page = productRepository.findAll(PageRequest.of(1, 2, Sort.by("price")));
+
+        assertThat(page.getContent()).extracting(Product::getSku).containsExactly("sku3", "sku4");
+        assertThat(page.getTotalElements()).isEqualTo(5);
+        assertThat(page.getTotalPages()).isEqualTo(3);
     }
 
     @Test

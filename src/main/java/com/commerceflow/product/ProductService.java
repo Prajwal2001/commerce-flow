@@ -2,11 +2,14 @@ package com.commerceflow.product;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 public class ProductService {
@@ -54,9 +57,11 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProductResponse> list() {
-        return productRepository.findAll().stream()
-                .map(ProductResponse::from)
-                .toList();
+    public PageResponse<ProductResponse> list(Pageable pageable) {
+
+        Page<Product> page = productRepository.findAll(pageable);
+        List<ProductResponse> productResponseList = page.stream().map(ProductResponse::from).toList();
+
+        return new PageResponse<>(productResponseList, pageable.getPageNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages());
     }
 }

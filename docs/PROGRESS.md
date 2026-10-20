@@ -95,10 +95,10 @@
 | Step | Status |
 |---|---|
 | CI workflow (`.github/workflows/ci.yml`: checkout, Temurin 25, Gradle cache, `./gradlew clean test`, test report on failure) | Written. Locally: YAML parses, and `./gradlew clean test --no-daemon` passed (29 tests, 1m 6s). **Not yet run on GitHub**: no remote is configured |
-| Pagination and sorting | Not started |
+| Pagination and sorting | Done: `GET /api/v1/products?page&size&sort` returns a `PageResponse` envelope; size 1 to 100, whitelisted sort fields, bad values are 400 (`Invalid sort` title). Tests written first (10 red against a stub), then green; mutation check (whitelist disabled) failed exactly the two sort tests. Breaking change: the list is no longer a plain array |
 | OpenAPI documentation | Not started |
 | Update / delete | Not started |
 
 ## Next task
 
-Create the GitHub remote, push, and confirm the first CI run is green; then pagination and sorting.
+Confirm the first CI run on GitHub is green (not yet reported); then OpenAPI documentation.
