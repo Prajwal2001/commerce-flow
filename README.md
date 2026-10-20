@@ -42,13 +42,19 @@ The tests build their schema from the same Flyway migration the app uses.
 
 ## API
 
+Interactive documentation: <http://localhost:8080/swagger-ui/index.html> (raw OpenAPI document at `/v3/api-docs`). It is generated from the controller annotations and checked by `OpenApiDocumentationTest`.
+
 Base path `/api/v1/products`.
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
 | `POST` | `/api/v1/products` | `201` + `Location` header + body | `400` invalid, `409` duplicate SKU |
 | `GET` | `/api/v1/products/{id}` | `200` | `400` malformed id, `404` unknown id |
-| `GET` | `/api/v1/products` | `200` (plain list; no pagination yet) | |
+| `GET` | `/api/v1/products?page=0&size=20&sort=createdAt,desc` | `200` paged list | `400` invalid paging or sort |
+| `PUT` | `/api/v1/products/{id}` | `200` + updated body | `400` invalid, `404` unknown id, `409` stale `version` |
+| `DELETE` | `/api/v1/products/{id}` | `204` | `400` malformed id, `404` unknown id |
+
+Responses include a `version` that starts at 0 and increases with every update.
 
 Request fields: `sku` (required, max 64), `name` (required, max 255), `description` (optional, max 2000),
 `price` (required, greater than 0, at most 10 integer digits and 2 decimals). Prices are always returned with two decimals.
@@ -57,6 +63,10 @@ Request fields: `sku` (required, max 64), `name` (required, max 255), `descripti
 # create -> 201
 curl -i -X POST localhost:8080/api/v1/products -H 'Content-Type: application/json' \
   -d '{"sku":"KB-001","name":"Keyboard","description":"Mechanical","price":79.9}'
+
+# update (send back the version you read) -> 200, or 409 if it changed meanwhile
+curl -X PUT localhost:8080/api/v1/products/<id> -H 'Content-Type: application/json' \
+  -d '{"name":"Keyboard v2","price":89.90,"version":0}'
 
 # fetch by the id in the Location header -> 200
 curl localhost:8080/api/v1/products/<id>
@@ -68,6 +78,12 @@ curl localhost:8080/api/v1/products
 curl -i -X POST localhost:8080/api/v1/products -H 'Content-Type: application/json' \
   -d '{"sku":"KB-001","name":"Other","price":10}'
 ```
+
+### Paging and sorting
+
+`page` (default 0, min 0), `size` (default 20, 1 to 100), `sort` as `property[,asc|desc]` (default `createdAt,desc`).
+Sortable properties: `createdAt`, `name`, `price`, `sku`. Anything else is a `400`, never a database error.
+The response is `{"content":[...],"page":0,"size":20,"totalElements":42,"totalPages":3}`.
 
 ### Error format
 
@@ -86,7 +102,7 @@ These are real responses captured from a running instance:
 {"detail":"Product not found: 00000000-0000-0000-0000-000000000000","instance":"/api/v1/products/00000000-0000-0000-0000-000000000000","status":404,"title":"Product not found"}
 ```
 
-Malformed JSON and a non-UUID id also return `400` with the title `Bad Request`.
+Malformed JSON and a non-UUID id also return `400` with the title `Bad Request`. An invalid sort returns `400` with the title `Invalid sort`.
 Error messages never include SQL, driver text or constraint names.
 
 ## Database
@@ -115,8 +131,8 @@ curl localhost:8080/api/v1/products/<id>               # same id, fields and cre
 
 ## Known limitations
 
-- No pagination, sorting, update or delete yet (Milestone 2).
-- No OpenAPI documentation yet (Milestone 2); this README is the API reference for now.
+- `PUT` replaces `name`, `description` and `price`; the SKU is immutable. Updates use optimistic locking: every product has a `version`, `PUT` must send back the version it read, and a stale version (or a lost race between simultaneous updates) returns `409` with the title `Version conflict` instead of overwriting the other change.
+- `DELETE` is permanent (hard delete) and frees the SKU. To be revisited when orders exist.
 - No authentication or authorization.
 - CI: `.github/workflows/ci.yml` runs `./gradlew clean test` on every PR and push to `main`. It has been run locally in the same form but **not yet on GitHub** (no remote configured at the time of writing).
 - A non-SKU integrity violation is rethrown by the service and handled as an unexpected error (`500`) by design; the service-level rethrow is unit-tested, but the HTTP response body for that case has not been verified.

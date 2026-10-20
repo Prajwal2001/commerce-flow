@@ -31,6 +31,10 @@ public class Product {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    @Version
+    private long version;
+
     protected Product() {}
 
     public Product(String sku, String name, String description, BigDecimal price) {
@@ -63,6 +67,16 @@ public class Product {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    void updateData(String name, String description, BigDecimal price) {
+        this.name = name;
+        this.description = description;
+        this.price = normalize(price);
     }
 
     /**

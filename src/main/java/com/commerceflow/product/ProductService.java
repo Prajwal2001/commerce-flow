@@ -2,6 +2,8 @@ package com.commerceflow.product;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,9 +56,33 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProductResponse> list() {
-        return productRepository.findAll().stream()
-                .map(ProductResponse::from)
-                .toList();
+    public PageResponse<ProductResponse> list(Pageable pageable) {
+
+        Page<Product> page = productRepository.findAll(pageable);
+        List<ProductResponse> productResponseList = page.stream().map(ProductResponse::from).toList();
+
+        return new PageResponse<>(productResponseList, pageable.getPageNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages());
+    }
+
+    @Transactional
+    public ProductResponse update(UUID id, UpdateProductRequest request) {
+        Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
+
+        if (product.getVersion() != request.version()) {
+            throw new ProductVersionConflictException("Product version " + product.getVersion() + " not matching with requested product version: " + request.version());
+        }
+
+        product.updateData(request.name(), request.description(), request.price());
+
+        Product updatedProduct = productRepository.saveAndFlush(product);
+
+        return ProductResponse.from(updatedProduct);
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
+
+        productRepository.delete(product);
     }
 }
