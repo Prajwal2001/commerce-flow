@@ -90,6 +90,15 @@
 - `ddl-auto: validate` checks tables, columns and column types, not precision, scale or length (verified by experiment).
 - Flyway filenames need `V<version>__<description>.sql` with two underscores.
 
+## Milestone 2 (in progress, branch `feature/ci`, stacked on `feature/starting-product`)
+
+| Step | Status |
+|---|---|
+| CI workflow (`.github/workflows/ci.yml`: checkout, Temurin 25, Gradle cache, `./gradlew clean test`, test report on failure) | Written. Locally: YAML parses, and `./gradlew clean test --no-daemon` passed (29 tests, 1m 6s). **Not yet run on GitHub**: no remote is configured |
+| Pagination and sorting | Not started |
+| OpenAPI documentation | Not started |
+| Update / delete | Not started |
+
 ## Next task
 
-Milestone 1 is complete. Milestone 2 (not started): pagination and sorting, OpenAPI documentation, update/delete, a minimal GitHub Actions CI workflow.
+Create the GitHub remote, push, and confirm the first CI run is green; then pagination and sorting.
