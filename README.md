@@ -79,6 +79,17 @@ curl -i -X POST localhost:8080/api/v1/products -H 'Content-Type: application/jso
   -d '{"sku":"KB-001","name":"Other","price":10}'
 ```
 
+### Inventory
+
+Stock records live in their own module (`com.commerceflow.inventory`) and table, with no foreign key to the catalog; a stock record refers to a product only by `productId`, and the catalog is not consulted.
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| `POST` | `/api/v1/inventory` `{productId, available}` | `201` + `Location` | `400` invalid, `409` stock already exists |
+| `GET` | `/api/v1/inventory/{productId}` | `200` `{productId, available, version}` | `400` malformed id, `404` |
+
+`available` must be 0 or more. Reservations and concurrent purchases are the next steps of Milestone 3.
+
 ### Paging and sorting
 
 `page` (default 0, min 0), `size` (default 20, 1 to 100), `sort` as `property[,asc|desc]` (default `createdAt,desc`).

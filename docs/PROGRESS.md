@@ -100,6 +100,14 @@
 | Update / delete | Done (without versioning): `PUT /{id}` replaces name/description/price (SKU immutable), `DELETE /{id}` is a hard delete returning 204. 16 tests written first (14 behaviour + 2 documentation), all red against stubs, then green. Full suite: 61 passed. Dirty checking means `update` needs no `save`. Review found `DELETE` returning 200 instead of 204 (void controller method) |
 | Optimistic locking (`@Version`, Flyway V2, version in request/response, 409 on stale) | Done: `V2__add_product_version.sql`, `@Version`, `version` required on `PUT`, early version check plus handler for `OptimisticLockingFailureException` (fixed detail text, no class names). 7 tests written first. Full suite: 68 passed. Mutations: removing `@Version` failed the 3 version/concurrency integration tests; removing the early check failed the stale-version tests but **not** the concurrent test, so both layers are needed. Review found: response built before flush showed the old version (fixed with `saveAndFlush`), unknown id reported as 409 (service order), handler leaking Hibernate's class name |
 
+## Milestone 3 — Inventory (in progress, branch `feature/inventory`)
+
+| Slice | Status |
+|---|---|
+| 1. Stock records: `POST /api/v1/inventory`, `GET /api/v1/inventory/{productId}`, `V3` migration with named `pk_stock_item` and `positive_available`, no FK to `products` | Done. 22 tests written first (15 red against stubs, then green): 7 controller, 7 end-to-end incl. 10 concurrent creates (1x201, 9x409), 3 repository, 1 OpenAPI. Full suite: 87 passed. Mutations: `Long` -> `long` on the version failed 3 tests (second create silently UPDATEd the row); ignoring the primary-key name failed 2. Found in review: `merge` vs `persist` with an assigned id, a catch-all `void` `@ExceptionHandler` that turned errors into `200`, `synchronized` used to hide a race |
+| 2. Reserving stock under concurrency, including the last unit | Not started |
+| 3. Confirm / release a reservation; compare locking strategies | Not started |
+
 ## Next task
 
-Confirm the first CI run on GitHub is green (not yet reported); Milestone 2 is complete; open and merge the stacked PRs bottom-up, then plan Milestone 3.
+Slice 2: reservations. Contract and failing tests first (including N threads reserving the last units), then the conditional `UPDATE ... WHERE available >= :qty` vs pessimistic vs optimistic comparison.

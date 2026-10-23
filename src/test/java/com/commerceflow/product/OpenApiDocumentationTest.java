@@ -104,4 +104,17 @@ class OpenApiDocumentationTest {
                 .exchange()
                 .expectStatus().isOk();
     }
+
+    @Test
+    void inventoryEndpointsAreDocumented() {
+        apiDocs()
+                .jsonPath("$.paths['/api/v1/inventory'].post.summary").isNotEmpty()
+                .jsonPath("$.paths['/api/v1/inventory'].post.responses['201']").exists()
+                .jsonPath("$.paths['/api/v1/inventory'].post.responses['400']").exists()
+                .jsonPath("$.paths['/api/v1/inventory'].post.responses['409']").exists()
+                .jsonPath("$.paths['/api/v1/inventory/{productId}'].get.summary").isNotEmpty()
+                .jsonPath("$.paths['/api/v1/inventory/{productId}'].get.responses['200']").exists()
+                .jsonPath("$.paths['/api/v1/inventory/{productId}'].get.responses['400']").exists()
+                .jsonPath("$.paths['/api/v1/inventory/{productId}'].get.responses['404']").exists();
+    }
 }
