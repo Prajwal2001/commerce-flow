@@ -1,6 +1,7 @@
 package com.commerceflow.inventory;
 
 import com.commerceflow.TestcontainersConfiguration;
+import com.commerceflow.support.Concurrently;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -10,14 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -107,40 +102,17 @@ class StockApiIntegrationTest {
 
     @Test
     void concurrentCreatesForTheSameProductYieldExactlyOneStockRow() throws Exception {
-        int attempts = 10;
         UUID productId = UUID.randomUUID();
-        ExecutorService pool = Executors.newFixedThreadPool(attempts);
-        CountDownLatch allReady = new CountDownLatch(attempts);
-        CountDownLatch startGun = new CountDownLatch(1);
 
-        try {
-            List<Future<Integer>> responses = new ArrayList<>();
-            for (int i = 0; i < attempts; i++) {
-                int quantity = i + 1;
-                responses.add(pool.submit(() -> {
-                    allReady.countDown();
-                    startGun.await();
-                    return client.post().uri("/api/v1/inventory")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .body(new CreateStockRequest(productId, quantity))
-                            .exchange()
-                            .returnResult()
-                            .getStatus()
-                            .value();
-                }));
-            }
-            assertThat(allReady.await(10, TimeUnit.SECONDS)).isTrue();
-            startGun.countDown();
+        List<Integer> statuses = Concurrently.run(10, index -> client.post().uri("/api/v1/inventory")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CreateStockRequest(productId, index + 1))
+                .exchange()
+                .returnResult()
+                .getStatus()
+                .value());
 
-            List<Integer> statuses = new ArrayList<>();
-            for (Future<Integer> response : responses) {
-                statuses.add(response.get(30, TimeUnit.SECONDS));
-            }
-
-            assertThat(statuses).containsOnly(201, 409);
-            assertThat(statuses.stream().filter(status -> status == 201)).hasSize(1);
-        } finally {
-            pool.shutdownNow();
-        }
+        assertThat(statuses).containsOnly(201, 409);
+        assertThat(statuses.stream().filter(status -> status == 201)).hasSize(1);
     }
 }

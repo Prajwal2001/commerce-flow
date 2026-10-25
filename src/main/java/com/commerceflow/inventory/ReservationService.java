@@ -23,12 +23,11 @@ public class ReservationService {
 
         int updated = stockRepository.updateStock(productId, request.quantity());
 
-        if (updated <= 0) {
+        if (updated == 0) {
             throw new InsufficientStockException("quantity must be less than or equal to available");
         }
 
-        Reservation reservation = reservationRepository.saveAndFlush(new Reservation(stockItem, request.quantity(), ReservationStatus.RESERVED));
-        System.out.println(reservation);
+        Reservation reservation = reservationRepository.saveAndFlush(Reservation.reserve(stockItem.getProductId(), request.quantity()));
 
         return ReservationResponse.from(reservation);
     }
@@ -36,7 +35,7 @@ public class ReservationService {
     @Transactional(readOnly = true)
     public ReservationResponse get(UUID productId, UUID reservationId) {
         return ReservationResponse.from(
-                reservationRepository.findByStockItem_ProductIdAndId(productId, reservationId).orElseThrow(
+                reservationRepository.findByProductIdAndId(productId, reservationId).orElseThrow(
                         () -> new ReservationNotFoundException("Reservation not found for reservation id: " + reservationId)));
     }
 }

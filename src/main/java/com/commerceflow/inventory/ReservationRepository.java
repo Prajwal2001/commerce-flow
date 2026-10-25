@@ -11,5 +11,5 @@ import java.util.UUID;
 
 @Repository
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
-    Optional<Reservation> findByStockItem_ProductIdAndId(UUID productId, UUID id);
+    Optional<Reservation> findByProductIdAndId(UUID productId, UUID id);
 }

@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+import static com.commerceflow.common.ConstraintViolations.isViolationOf;
+
 @Service
 public class StockService {
 
@@ -24,20 +26,11 @@ public class StockService {
             StockItem stockItem = stockRepository.saveAndFlush(new StockItem(request.productId(), request.available()));
             return StockResponse.from(stockItem);
         } catch (DataIntegrityViolationException e) {
-            if (isStockAlreadyExisting(e)) {
+            if (isViolationOf(e, PK_STOCK_ITEM)) {
                 throw new StockAlreadyExistsException("Stock already exists for product " + request.productId());
             }
             throw e;
         }
-    }
-
-    private boolean isStockAlreadyExisting(DataIntegrityViolationException e) {
-        for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof ConstraintViolationException cve && PK_STOCK_ITEM.equals(cve.getConstraintName())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Transactional(readOnly = true)

@@ -1,6 +1,7 @@
 package com.commerceflow.inventory;
 
 import com.commerceflow.TestcontainersConfiguration;
+import com.commerceflow.support.Concurrently;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -10,14 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -195,34 +190,12 @@ class ReservationApiIntegrationTest {
 
     /** All buyers start at the same instant so the requests really overlap. Returns one status per buyer. */
     private List<Integer> reserveConcurrently(UUID productId, int buyers, int quantity) throws Exception {
-        ExecutorService pool = Executors.newFixedThreadPool(buyers);
-        CountDownLatch allReady = new CountDownLatch(buyers);
-        CountDownLatch startGun = new CountDownLatch(1);
-        try {
-            List<Future<Integer>> responses = new ArrayList<>();
-            for (int i = 0; i < buyers; i++) {
-                responses.add(pool.submit(() -> {
-                    allReady.countDown();
-                    startGun.await();
-                    return client.post().uri("/api/v1/inventory/{productId}/reservations", productId)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .body(new ReserveStockRequest(quantity))
-                            .exchange()
-                            .returnResult()
-                            .getStatus()
-                            .value();
-                }));
-            }
-            assertThat(allReady.await(15, TimeUnit.SECONDS)).isTrue();
-            startGun.countDown();
-
-            List<Integer> statuses = new ArrayList<>();
-            for (Future<Integer> response : responses) {
-                statuses.add(response.get(60, TimeUnit.SECONDS));
-            }
-            return statuses;
-        } finally {
-            pool.shutdownNow();
-        }
+        return Concurrently.run(buyers, index -> client.post().uri("/api/v1/inventory/{productId}/reservations", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new ReserveStockRequest(quantity))
+                .exchange()
+                .returnResult()
+                .getStatus()
+                .value());
     }
 }

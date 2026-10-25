@@ -1,7 +1,14 @@
 package com.commerceflow.inventory;
 
-import jakarta.persistence.*;
-import jakarta.validation.constraints.Positive;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -15,9 +22,8 @@ public class Reservation {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id")
-    private StockItem stockItem;
+    @Column(name = "product_id")
+    private UUID productId;
 
     @Column(nullable = false)
     private int quantity;
@@ -35,10 +41,15 @@ public class Reservation {
 
     protected Reservation() {}
 
-    protected Reservation(StockItem stockItem, int quantity, ReservationStatus status) {
-        this.stockItem = stockItem;
+    /** A new reservation always starts as RESERVED; later states are reached only through transitions. */
+    static Reservation reserve(UUID productId, int quantity) {
+        return new Reservation(productId, quantity);
+    }
+
+    private Reservation(UUID productId, int quantity) {
+        this.productId = productId;
         this.quantity = quantity;
-        this.status = status;
+        this.status = ReservationStatus.RESERVED;
         this.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
@@ -46,8 +57,8 @@ public class Reservation {
         return id;
     }
 
-    public StockItem getStockItem() {
-        return stockItem;
+    public UUID getProductId() {
+        return productId;
     }
 
     public int getQuantity() {

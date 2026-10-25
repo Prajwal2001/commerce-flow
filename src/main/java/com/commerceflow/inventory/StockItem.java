@@ -1,6 +1,10 @@
 package com.commerceflow.inventory;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.UUID;
@@ -16,11 +20,13 @@ public class StockItem {
     @PositiveOrZero
     private int available;
 
+
+    //version is of type Long and not long (primitive) as the productId is not generated, the version null check becomes critical for deciding INSERT or UPDATE
     @Column(nullable = false)
     @Version
     private Long version;
 
-    public StockItem() {
+    protected StockItem() {
     }
 
     protected StockItem(UUID productId, int available) {

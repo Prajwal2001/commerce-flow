@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
+import static com.commerceflow.common.ConstraintViolations.isViolationOf;
+
 @Service
 public class ProductService {
 
@@ -31,21 +33,11 @@ public class ProductService {
         } catch (DataIntegrityViolationException e) {
             // The database constraint is the source of truth; an existsBySku check first would race
             // with a concurrent request. Do not expose e.getMessage(): it contains SQL and constraint names.
-            if (violatesSkuConstraint(e)) {
+            if (isViolationOf(e, SKU_CONSTRAINT)) {
                 throw new DuplicateSkuException("Product with SKU '" + request.sku() + "' already exists");
             }
             throw e;
         }
-    }
-
-    /** The constraint name is the contract with V1__create_products.sql; walk the cause chain because wrapping depth can vary. */
-    private static boolean violatesSkuConstraint(Throwable e) {
-        for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof ConstraintViolationException cve && SKU_CONSTRAINT.equals(cve.getConstraintName())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Transactional(readOnly = true)
@@ -61,7 +53,7 @@ public class ProductService {
         Page<Product> page = productRepository.findAll(pageable);
         List<ProductResponse> productResponseList = page.stream().map(ProductResponse::from).toList();
 
-        return new PageResponse<>(productResponseList, pageable.getPageNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages());
+        return new PageResponse<>(productResponseList, page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages());
     }
 
     @Transactional
@@ -69,7 +61,7 @@ public class ProductService {
         Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
 
         if (product.getVersion() != request.version()) {
-            throw new ProductVersionConflictException("Product version " + product.getVersion() + " not matching with requested product version: " + request.version());
+            throw new ProductVersionConflictException("Product " + id + " is at version " + product.getVersion() + " but the request is based on version " + request.version() + "; reload it and retry");
         }
 
         product.updateData(request.name(), request.description(), request.price());
@@ -81,8 +73,10 @@ public class ProductService {
 
     @Transactional
     public void delete(UUID id) {
-        Product product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException("Product not found: " + id));
-
-        productRepository.delete(product);
+        // No find-then-delete: with concurrent deletes every caller would find the row, and the losers would
+        // fail on Hibernate's version check and be misreported as a version conflict instead of "not found".
+        if (productRepository.deleteProductById(id) == 0) {
+            throw new ProductNotFoundException("Product not found: " + id);
+        }
     }
 }
