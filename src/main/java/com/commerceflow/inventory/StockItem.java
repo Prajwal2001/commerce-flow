@@ -1,7 +1,6 @@
 package com.commerceflow.inventory;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.UUID;

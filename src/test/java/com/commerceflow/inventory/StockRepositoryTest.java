@@ -72,4 +72,23 @@ class StockRepositoryTest {
                 .isInstanceOfSatisfying(ConstraintViolationException.class,
                         e -> assertThat(e.getConstraintName()).isEqualTo(StockService.PK_STOCK_ITEM));
     }
+
+    @Test
+    void theDatabaseRejectsAReservationOfZeroUnits() {
+        UUID productId = UUID.randomUUID();
+        entityManager.getEntityManager()
+                .createNativeQuery("insert into stock_item (product_id, available, version) values (?1, 5, 0)")
+                .setParameter(1, productId)
+                .executeUpdate();
+
+        // A reservation of nothing is meaningless; the API requires quantity >= 1, so the database must too.
+        assertThatThrownBy(() -> entityManager.getEntityManager()
+                .createNativeQuery("insert into reservation (id, product_id, quantity, status, created_at) "
+                        + "values (?1, ?2, 0, 'RESERVED', now())")
+                .setParameter(1, UUID.randomUUID())
+                .setParameter(2, productId)
+                .executeUpdate())
+                .rootCause()
+                .hasMessageContaining("positive_quantity");
+    }
 }
