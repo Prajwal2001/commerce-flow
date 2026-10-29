@@ -12,6 +12,10 @@ import java.util.UUID;
 public interface StockRepository extends JpaRepository<StockItem, UUID> {
     /** flush first so pending changes are not lost; clear afterwards so no stale StockItem stays in the persistence context. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("update StockItem si set si.available = si.available - :qty, si.version = si.version + 1 where si.productId = :productId and si.available >= :qty")
+    @Query("UPDATE StockItem si SET si.available = si.available - :qty, si.version = si.version + 1 WHERE si.productId = :productId AND si.available >= :qty")
     int updateStock(@Param("productId") UUID productId, @Param("qty") int qty);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE StockItem  si SET si.available = si.available + :qty, si.version = si.version + 1 WHERE si.productId = :productId")
+    int updatedResturnedStock(@Param("productId") UUID productId, @Param("qty") int qty);
 }

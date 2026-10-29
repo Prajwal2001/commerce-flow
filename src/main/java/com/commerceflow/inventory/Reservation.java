@@ -69,6 +69,14 @@ public class Reservation {
         return status;
     }
 
+    protected void confirm() {
+        this.status = ReservationStatus.CONFIRMED;
+    }
+
+    protected void release() {
+        this.status = ReservationStatus.RELEASED;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

@@ -5,6 +5,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.Arrays;
+
 /** Maps the inventory module's own exceptions to HTTP; covers every controller in this package. */
 @RestControllerAdvice(basePackageClasses = StockController.class)
 class InventoryExceptionHandler {
@@ -35,6 +37,13 @@ class InventoryExceptionHandler {
     ProblemDetail reservationNotFound(ReservationNotFoundException ex) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Reservation not found");
         problemDetail.setTitle("Reservation not found");
+        return problemDetail;
+    }
+
+    @ExceptionHandler(InvalidReservationStateException.class)
+    ProblemDetail invalidReservationState(InvalidReservationStateException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Invalid reservation state");
+        problemDetail.setTitle("Reservation state conflict");
         return problemDetail;
     }
 }

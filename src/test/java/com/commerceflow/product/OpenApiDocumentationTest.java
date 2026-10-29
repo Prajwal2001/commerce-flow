@@ -122,6 +122,7 @@ class OpenApiDocumentationTest {
     void reservationEndpointsAreDocumented() {
         apiDocs()
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations'].post.summary").isNotEmpty()
+                .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations'].post.tags[0]").isEqualTo("Inventory")
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations'].post.responses['201']").exists()
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations'].post.responses['400']").exists()
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations'].post.responses['404']").exists()
@@ -129,5 +130,18 @@ class OpenApiDocumentationTest {
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations/{reservationId}'].get.summary").isNotEmpty()
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations/{reservationId}'].get.responses['200']").exists()
                 .jsonPath("$.paths['/api/v1/inventory/{productId}/reservations/{reservationId}'].get.responses['404']").exists();
+    }
+
+    @Test
+    void confirmAndReleaseAreDocumented() {
+        for (String action : new String[]{"confirm", "release"}) {
+            String path = "$.paths['/api/v1/inventory/{productId}/reservations/{reservationId}/" + action + "'].post";
+            apiDocs()
+                    .jsonPath(path + ".summary").isNotEmpty()
+                    .jsonPath(path + ".responses['200']").exists()
+                    .jsonPath(path + ".responses['400']").exists()
+                    .jsonPath(path + ".responses['404']").exists()
+                    .jsonPath(path + ".responses['409']").exists();
+        }
     }
 }

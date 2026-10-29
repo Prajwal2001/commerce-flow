@@ -135,4 +135,64 @@ class ReservationControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Reservation not found"));
     }
+
+    @Test
+    void confirmReturns200WithTheConfirmedReservation() throws Exception {
+        UUID reservationId = UUID.randomUUID();
+        when(reservationService.confirm(productId, reservationId))
+                .thenReturn(new ReservationResponse(reservationId, productId, 3, ReservationStatus.CONFIRMED));
+
+        mockMvc.perform(post("/api/v1/inventory/{productId}/reservations/{id}/confirm", productId, reservationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(reservationId.toString()))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+    }
+
+    @Test
+    void releaseReturns200WithTheReleasedReservation() throws Exception {
+        UUID reservationId = UUID.randomUUID();
+        when(reservationService.release(productId, reservationId))
+                .thenReturn(new ReservationResponse(reservationId, productId, 3, ReservationStatus.RELEASED));
+
+        mockMvc.perform(post("/api/v1/inventory/{productId}/reservations/{id}/release", productId, reservationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RELEASED"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"confirm", "release"})
+    void anUnknownReservationReturns404(String action) throws Exception {
+        UUID reservationId = UUID.randomUUID();
+        var missing = new ReservationNotFoundException("Reservation not found: " + reservationId);
+        when(reservationService.confirm(productId, reservationId)).thenThrow(missing);
+        when(reservationService.release(productId, reservationId)).thenThrow(missing);
+
+        mockMvc.perform(post("/api/v1/inventory/{productId}/reservations/{id}/" + action, productId, reservationId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Reservation not found"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"confirm", "release"})
+    void aReservationInTheWrongStateReturns409(String action) throws Exception {
+        UUID reservationId = UUID.randomUUID();
+        var wrongState = new InvalidReservationStateException("internal detail that must not reach the client");
+        when(reservationService.confirm(productId, reservationId)).thenThrow(wrongState);
+        when(reservationService.release(productId, reservationId)).thenThrow(wrongState);
+
+        mockMvc.perform(post("/api/v1/inventory/{productId}/reservations/{id}/" + action, productId, reservationId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Reservation state conflict"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("internal detail"))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"confirm", "release"})
+    void aMalformedIdReturns400(String action) throws Exception {
+        mockMvc.perform(post("/api/v1/inventory/{productId}/reservations/{id}/" + action, productId, "not-a-uuid"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(reservationService);
+    }
 }

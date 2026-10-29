@@ -38,4 +38,36 @@ public class ReservationService {
                 reservationRepository.findByProductIdAndId(productId, reservationId).orElseThrow(
                         () -> new ReservationNotFoundException("Reservation not found for reservation id: " + reservationId)));
     }
+
+    @Transactional
+    public ReservationResponse confirm(UUID productId, UUID reservationId) {
+        Reservation reservation = reservationRepository.findByProductIdAndIdLocked(productId, reservationId).orElseThrow(() -> new ReservationNotFoundException("Reservation not found for reservation id: " + reservationId));
+
+        if (reservation.getStatus() == ReservationStatus.RELEASED) {
+            throw new InvalidReservationStateException("Invalid change of reservation status from " + ReservationStatus.RELEASED + " to " + ReservationStatus.CONFIRMED);
+        }
+
+        if (reservation.getStatus() == ReservationStatus.RESERVED) {
+            reservation.confirm();
+            return ReservationResponse.from(reservationRepository.saveAndFlush(reservation));
+        }
+
+        return ReservationResponse.from(reservation);
+    }
+
+    @Transactional
+    public ReservationResponse release(UUID productId, UUID reservationId) {
+        Reservation reservation = reservationRepository.findByProductIdAndIdLocked(productId, reservationId).orElseThrow(() -> new ReservationNotFoundException("Reservation not found for reservation id: " + reservationId));
+
+        if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
+            throw new InvalidReservationStateException("Invalid change of reservation status from " + ReservationStatus.CONFIRMED + " to " + ReservationStatus.RELEASED);
+        }
+
+        if (reservation.getStatus() == ReservationStatus.RESERVED) {
+            reservation.release();
+            stockRepository.updatedResturnedStock(productId, reservation.getQuantity());
+        }
+
+        return ReservationResponse.from(reservation);
+    }
 }

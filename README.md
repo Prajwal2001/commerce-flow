@@ -95,7 +95,12 @@ Stock records live in their own module (`com.commerceflow.inventory`) and table,
 | `POST` | `/api/v1/inventory/{productId}/reservations` `{quantity}` | `201` + `Location` + reservation (`RESERVED`) | `400` quantity below 1 or bad id, `404` no stock record, `409` insufficient stock |
 | `GET` | `/api/v1/inventory/{productId}/reservations/{reservationId}` | `200` | `400`, `404` |
 
-Reserving takes the units out of `available` immediately and atomically (a conditional `UPDATE ... WHERE available >= :qty`, so concurrent buyers can never oversell; the last unit goes to exactly one of them) and bumps the stock `version`. Confirming and releasing reservations is the next step of Milestone 3.
+Reserving takes the units out of `available` immediately and atomically (a conditional `UPDATE ... WHERE available >= :qty`, so concurrent buyers can never oversell; the last unit goes to exactly one of them) and bumps the stock `version`. | Method | Path | Success | Errors |
+|---|---|---|---|
+| `POST` | `/api/v1/inventory/{productId}/reservations/{reservationId}/confirm` | `200`, status `CONFIRMED`; the units stay deducted | `400`, `404`, `409` (already released) |
+| `POST` | `/api/v1/inventory/{productId}/reservations/{reservationId}/release` | `200`, status `RELEASED`; the units return to `available` | `400`, `404`, `409` (already confirmed) |
+
+Repeating the same action is a no-op that returns the current state (`200`); releasing returns the units exactly once, even when called concurrently. The opposite action from a final state is a `409` with the title `Reservation state conflict`.
 
 ### Paging and sorting
 
