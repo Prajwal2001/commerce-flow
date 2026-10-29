@@ -79,6 +79,24 @@ curl -i -X POST localhost:8080/api/v1/products -H 'Content-Type: application/jso
   -d '{"sku":"KB-001","name":"Other","price":10}'
 ```
 
+### Inventory
+
+Stock records live in their own module (`com.commerceflow.inventory`) and table, with no foreign key to the catalog; a stock record refers to a product only by `productId`, and the catalog is not consulted.
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| `POST` | `/api/v1/inventory` `{productId, available}` | `201` + `Location` | `400` invalid, `409` stock already exists |
+| `GET` | `/api/v1/inventory/{productId}` | `200` `{productId, available, version}` | `400` malformed id, `404` |
+
+`available` must be 0 or more.
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| `POST` | `/api/v1/inventory/{productId}/reservations` `{quantity}` | `201` + `Location` + reservation (`RESERVED`) | `400` quantity below 1 or bad id, `404` no stock record, `409` insufficient stock |
+| `GET` | `/api/v1/inventory/{productId}/reservations/{reservationId}` | `200` | `400`, `404` |
+
+Reserving takes the units out of `available` immediately and atomically (a conditional `UPDATE ... WHERE available >= :qty`, so concurrent buyers can never oversell; the last unit goes to exactly one of them) and bumps the stock `version`. Confirming and releasing reservations is the next step of Milestone 3.
+
 ### Paging and sorting
 
 `page` (default 0, min 0), `size` (default 20, 1 to 100), `sort` as `property[,asc|desc]` (default `createdAt,desc`).

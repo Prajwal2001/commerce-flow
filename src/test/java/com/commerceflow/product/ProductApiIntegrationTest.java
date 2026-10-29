@@ -1,6 +1,7 @@
 package com.commerceflow.product;
 
 import com.commerceflow.TestcontainersConfiguration;
+import com.commerceflow.support.Concurrently;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -12,14 +13,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.springframework.test.web.servlet.client.StatusAssertions;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -144,40 +139,18 @@ class ProductApiIntegrationTest {
     void concurrentCreatesWithTheSameSkuYieldExactlyOneProduct() throws Exception {
         int attempts = 10;
         String sku = uniqueSku();
-        ExecutorService pool = Executors.newFixedThreadPool(attempts);
-        CountDownLatch allReady = new CountDownLatch(attempts);
-        CountDownLatch startGun = new CountDownLatch(1);
 
-        try {
-            List<Future<Integer>> responses = new ArrayList<>();
-            for (int i = 0; i < attempts; i++) {
-                responses.add(pool.submit(() -> {
-                    allReady.countDown();
-                    startGun.await();   // every thread waits here so the requests really overlap
-                    return client.post().uri("/api/v1/products")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .body(request(sku))
-                            .exchange()
-                            .returnResult()
-                            .getStatus()
-                            .value();
-                }));
-            }
-            assertThat(allReady.await(10, TimeUnit.SECONDS)).isTrue();
-            startGun.countDown();
+        List<Integer> statuses = Concurrently.run(attempts, index -> client.post().uri("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request(sku))
+                .exchange()
+                .returnResult()
+                .getStatus()
+                .value());
 
-            List<Integer> statuses = new ArrayList<>();
-            for (Future<Integer> response : responses) {
-                statuses.add(response.get(30, TimeUnit.SECONDS));
-            }
-
-            assertThat(statuses).containsOnly(201, 409);
-            assertThat(statuses.stream().filter(status -> status == 201)).hasSize(1);
-            assertThat(statuses.stream().filter(status -> status == 409)).hasSize(attempts - 1);
-        } finally {
-            pool.shutdownNow();
-        }
-
+        assertThat(statuses).containsOnly(201, 409);
+        assertThat(statuses.stream().filter(status -> status == 201)).hasSize(1);
+        assertThat(statuses.stream().filter(status -> status == 409)).hasSize(attempts - 1);
         // The database, not just the HTTP responses, must hold exactly one row for this SKU.
         assertThat(productRepository.findAll()).filteredOn(product -> sku.equals(product.getSku())).hasSize(1);
     }
@@ -367,45 +340,33 @@ class ProductApiIntegrationTest {
 
     @Test
     void concurrentUpdatesFromTheSameVersionYieldExactlyOneWinner() throws Exception {
-        int attempts = 10;
         ProductResponse created = createProduct(uniqueSku());
-        ExecutorService pool = Executors.newFixedThreadPool(attempts);
-        CountDownLatch allReady = new CountDownLatch(attempts);
-        CountDownLatch startGun = new CountDownLatch(1);
 
-        try {
-            List<Future<Integer>> responses = new ArrayList<>();
-            for (int i = 0; i < attempts; i++) {
-                String name = "writer-" + i;
-                responses.add(pool.submit(() -> {
-                    allReady.countDown();
-                    startGun.await();
-                    return client.put().uri("/api/v1/products/{id}", created.id())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .body(new UpdateProductRequest(name, null, BigDecimal.TEN, 0L))
-                            .exchange()
-                            .returnResult()
-                            .getStatus()
-                            .value();
-                }));
-            }
-            assertThat(allReady.await(10, TimeUnit.SECONDS)).isTrue();
-            startGun.countDown();
+        List<Integer> statuses = Concurrently.run(10, index -> put(created.id(),
+                new UpdateProductRequest("writer-" + index, null, BigDecimal.TEN, 0L))
+                .returnResult()
+                .getStatus()
+                .value());
 
-            List<Integer> statuses = new ArrayList<>();
-            for (Future<Integer> response : responses) {
-                statuses.add(response.get(30, TimeUnit.SECONDS));
-            }
-
-            assertThat(statuses).containsOnly(200, 409);
-            assertThat(statuses.stream().filter(status -> status == 200)).hasSize(1);
-        } finally {
-            pool.shutdownNow();
-        }
-
+        assertThat(statuses).containsOnly(200, 409);
+        assertThat(statuses.stream().filter(status -> status == 200)).hasSize(1);
         // Exactly one UPDATE took effect: the version moved from 0 to 1, not further.
         client.get().uri("/api/v1/products/{id}", created.id()).exchange()
                 .expectBody(ProductResponse.class)
                 .value(fetched -> assertThat(fetched.version()).isEqualTo(1L));
+    }
+
+    @Test
+    void concurrentDeletesOfOneProductLeaveExactlyOneSuccessAndCleanNotFounds() throws Exception {
+        ProductResponse created = createProduct(uniqueSku());
+
+        List<Integer> statuses = Concurrently.run(10, index -> client.delete().uri("/api/v1/products/{id}", created.id())
+                .exchange()
+                .returnResult()
+                .getStatus()
+                .value());
+
+        assertThat(statuses).containsOnly(204, 404);
+        assertThat(statuses.stream().filter(status -> status == 204)).hasSize(1);
     }
 }

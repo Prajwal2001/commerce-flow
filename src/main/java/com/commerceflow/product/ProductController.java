@@ -12,16 +12,22 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 
 @RestController
@@ -30,8 +36,6 @@ import java.util.UUID;
 public class ProductController {
 
     private static final String PROBLEM_JSON = "application/problem+json";
-
-    private static final Set<String> SORTABLE_PROPERTIES = new TreeSet<>(Set.of("createdAt", "name", "price", "sku"));
 
     private final ProductService productService;
 
@@ -80,7 +84,7 @@ public class ProductController {
             @Parameter(description = "Page size, 1 to 100") @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @Parameter(description = "`property[,asc|desc]`; property is one of createdAt, name, price, sku")
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        Pageable pageable = PageRequest.of(page, size, parseSort(sort));
+        Pageable pageable = PageRequest.of(page, size, ProductSort.parse(sort));
         return productService.list(pageable);
     }
 
@@ -109,21 +113,5 @@ public class ProductController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
         productService.delete(id);
-    }
-
-    /** Parses "property[,direction]"; anything outside the whitelist is a client error, not a database error. */
-    private static Sort parseSort(String sort) {
-        String[] parts = sort.split(",");
-        String property = parts[0].trim();
-        if (!SORTABLE_PROPERTIES.contains(property)) {
-            throw new InvalidSortException("Cannot sort by '" + property + "'; allowed: " + SORTABLE_PROPERTIES);
-        }
-        Sort.Direction direction = Sort.Direction.ASC;
-        if (parts.length > 1) {
-            String value = parts[1].trim();
-            direction = Sort.Direction.fromOptionalString(value)
-                    .orElseThrow(() -> new InvalidSortException("Invalid sort direction '" + value + "'; use asc or desc"));
-        }
-        return Sort.by(direction, property);
     }
 }
