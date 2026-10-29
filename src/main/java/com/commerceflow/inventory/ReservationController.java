@@ -23,9 +23,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/inventory/{productId}/reservations")
 @Tag(name = "Inventory", description = "Stock levels per product. Inventory owns its own data and does not consult the catalog")
-public class ReservationController {
-
-    private static final String PROBLEM_JSON = "application/problem+json";
+public class ReservationController implements ReservationApi {
 
     private final ReservationService reservationService;
 
@@ -34,18 +32,7 @@ public class ReservationController {
     }
 
     @PostMapping
-    @Operation(summary = "Reserve units of a product's stock",
-            description = "Takes `quantity` units out of the available stock immediately. Never oversells: when several "
-                    + "buyers compete for the last units, exactly as many succeed as there are units, and the rest get 409.")
-    @ApiResponse(responseCode = "201", description = "Units reserved",
-            headers = @Header(name = "Location", description = "URL of the reservation", schema = @Schema(type = "string", format = "uri")),
-            content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
-    @ApiResponse(responseCode = "400", description = "Invalid product id or quantity (must be at least 1)",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "No stock record for this product",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "409", description = "Fewer units are available than requested; nothing was reserved",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @Override
     public ResponseEntity<ReservationResponse> reserve(@PathVariable UUID productId, @Valid @RequestBody ReserveStockRequest request) {
         ReservationResponse response = reservationService.reserve(productId, request);
 
@@ -57,13 +44,7 @@ public class ReservationController {
     }
 
     @GetMapping("/{reservationId}")
-    @Operation(summary = "Get a reservation")
-    @ApiResponse(responseCode = "200", description = "The reservation",
-            content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
-    @ApiResponse(responseCode = "400", description = "An id is not a valid UUID",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "No such reservation for this product",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @Override
     public ReservationResponse get(@PathVariable UUID productId, @PathVariable UUID reservationId) {
         return reservationService.get(productId, reservationId);
     }
