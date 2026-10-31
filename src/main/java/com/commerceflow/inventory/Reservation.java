@@ -73,10 +73,6 @@ public class Reservation {
         this.status = ReservationStatus.CONFIRMED;
     }
 
-    protected void release() {
-        this.status = ReservationStatus.RELEASED;
-    }
-
     public Instant getCreatedAt() {
         return createdAt;
     }

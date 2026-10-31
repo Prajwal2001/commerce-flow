@@ -15,6 +15,9 @@ is for the owner to understand each concept, not to ship fast. Optimise for lear
   owner write it.
 
 ## How to teach
+- **Learning concepts and mental models is the primary objective.** For each task, give the owner *clues*
+  (the concept, the relevant API/keyword, what to watch out for, a question to reason about), not just
+  "implement X". Name the mental model first, then the hints, then let the owner write the code.
 - Explain the *why* and the trade-offs; don't just hand over the answer. Let the owner reach conclusions
   (including ADR text and findings) in their own words; Claude fact-checks them.
 - Don't pre-empt a design decision the owner is meant to work out. Give hints on request.

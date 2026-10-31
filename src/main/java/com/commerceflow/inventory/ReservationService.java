@@ -57,15 +57,15 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse release(UUID productId, UUID reservationId) {
-        Reservation reservation = reservationRepository.findByProductIdAndIdLocked(productId, reservationId).orElseThrow(() -> new ReservationNotFoundException("Reservation not found for reservation id: " + reservationId));
+        int updatedRowCnt = reservationRepository.updateStatusToRelease(reservationId, productId);
 
-        if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
-            throw new InvalidReservationStateException("Invalid change of reservation status from " + ReservationStatus.CONFIRMED + " to " + ReservationStatus.RELEASED);
-        }
+        Reservation reservation = reservationRepository.findByProductIdAndId(productId, reservationId)
+                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found for reservation id: " + reservationId));
 
-        if (reservation.getStatus() == ReservationStatus.RESERVED) {
-            reservation.release();
+        if (updatedRowCnt == 1) {
             stockRepository.updatedResturnedStock(productId, reservation.getQuantity());
+        } else if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
+            throw new InvalidReservationStateException("Invalid change of reservation status from " + ReservationStatus.CONFIRMED + " to " + ReservationStatus.RELEASED);
         }
 
         return ReservationResponse.from(reservation);

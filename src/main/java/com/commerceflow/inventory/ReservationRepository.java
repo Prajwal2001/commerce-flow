@@ -20,6 +20,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     Optional<Reservation> findByProductIdAndIdLocked(@Param("productId") UUID productId, @Param("id") UUID id);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("UPDATE Reservation r SET r.status = 'RELEASED', r.version = r.version + 1 WHERE r.id = :id AND r.status = 'RESERVED'")
-    int updateStatusToRelease(@Param("id") UUID id);
+    @Query("UPDATE Reservation r SET r.status = 'RELEASED', r.version = r.version + 1 WHERE r.id = :id AND r.status = 'RESERVED' AND r.productId = :productId")
+    int updateStatusToRelease(@Param("id") UUID id, @Param("productId") UUID productId);
 }
